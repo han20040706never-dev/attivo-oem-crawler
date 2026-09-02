@@ -435,10 +435,19 @@ def update_heartbeat():
 
 
 def check_heartbeat():
-    """检查云电脑实例心跳，last_seen超过30分钟告警"""
+    """检查云电脑实例心跳，先从GitHub拉最新instances.json，last_seen超过30分钟告警"""
     try:
-        import json, datetime
+        import json, datetime, requests
         reg_file = os.path.join(PROJECT, "instances.json")
+        # 先从GitHub拉最新的instances.json（本地可能是旧的）
+        try:
+            r = requests.get(GITHUB_RAW + "instances.json", timeout=15)
+            if r.status_code == 200:
+                remote = r.json()
+                with open(reg_file, 'w', encoding='utf-8') as f:
+                    json.dump(remote, f, ensure_ascii=False, indent=2)
+        except:
+            pass
         if not os.path.exists(reg_file):
             return
         with open(reg_file, 'r', encoding='utf-8') as f:
