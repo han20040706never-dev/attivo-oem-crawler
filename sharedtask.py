@@ -15,7 +15,7 @@ sharedtask.py —— 豆包Agent共享任务库（飞书多维表格）命令行
   python sharedtask.py complete <record_id> <结果> [经验]   # 完成任务+自动回收经验到共享记忆
 类型∈信息调研/内容生产/文件处理/代码开发/数据整理/其他；状态∈待处理/处理中/已完成/已取消
 """
-import sys, io, json, subprocess, argparse
+import sys, io, os, json, subprocess, argparse
 sys.stdout = io.TextIOWrapper(sys.stdout.detach(), encoding="utf-8")
 
 BASE = "MYQybnKkZaXY2Yswagyc7pKNnRf"
@@ -267,6 +267,50 @@ def ask(rid, question, instance_name="云电脑"):
     print(f"OK: 问题已提交，等待本地回复")
 
 
+def register(instance_name, tags_str=""):
+    """云电脑实例注册：记录名称、专长标签、活跃度"""
+    import datetime
+    reg_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "instances.json")
+    try:
+        with open(reg_file, 'r', encoding='utf-8') as f:
+            reg = json.load(f)
+    except:
+        reg = {"instances": {}}
+    tags = [t.strip() for t in tags_str.split(",") if t.strip()] if tags_str else []
+    inst = reg["instances"].get(instance_name, {"tags": [], "completed": 0, "failed": 0})
+    inst["tags"] = tags or inst.get("tags", [])
+    inst["last_seen"] = datetime.datetime.now().isoformat()
+    reg["instances"][instance_name] = inst
+    with open(reg_file, 'w', encoding='utf-8') as f:
+        json.dump(reg, f, ensure_ascii=False, indent=2)
+    print(f"OK: 实例【{instance_name}】已注册，标签: {', '.join(inst['tags']) or '无'}")
+
+
+def recommend(task_type=""):
+    """智能推荐：根据任务类型匹配最合适的云电脑实例"""
+    reg_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "instances.json")
+    try:
+        with open(reg_file, 'r', encoding='utf-8') as f:
+            reg = json.load(f)
+    except:
+        print("无实例注册"); return
+    instances = reg.get("instances", {})
+    if not instances:
+        print("无已注册实例"); return
+    # 按完成数+标签匹配排序
+    scored = []
+    for name, info in instances.items():
+        score = info.get("completed", 0)
+        if task_type:
+            score += sum(10 for t in info.get("tags", []) if task_type in t or t in task_type)
+        scored.append((score, name, info))
+    scored.sort(reverse=True)
+    print(f"=== 任务类型【{task_type or '通用'}】推荐实例 ===")
+    for score, name, info in scored[:5]:
+        tags = ", ".join(info.get("tags", [])) or "无标签"
+        print(f"  {name} | 完成{info.get('completed',0)}个 | 标签:{tags} | 匹配分:{score}")
+
+
 def fail(rid, reason, instance_name="云电脑"):
     """任务失败上报：标记失败+记录原因+push踩坑经验到共享记忆"""
     # 读取任务信息
@@ -466,6 +510,12 @@ def main():
     elif a.action == "ask":
         # ask <record_id> <问题>
         ask(a.rest[0], " ".join(a.rest[1:]), "云电脑")
+    elif a.action == "register":
+        # register <实例名> [标签1,标签2]
+        register(a.rest[0], ",".join(a.rest[1:]) if len(a.rest) > 1 else "")
+    elif a.action == "recommend":
+        # recommend [任务类型]
+        recommend(a.rest[0] if a.rest else "")
     else:
         print(__doc__)
 
