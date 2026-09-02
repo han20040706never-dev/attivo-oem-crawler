@@ -181,6 +181,7 @@ def _bump_instance(instance_name, field="completed"):
         reg.setdefault("instances", {})[instance_name] = inst
         with open(reg_file, 'w', encoding='utf-8') as f:
             json.dump(reg, f, ensure_ascii=False, indent=2)
+        _push_instances()
     except:
         pass
 
@@ -241,7 +242,8 @@ def claim(rid, instance_name):
     """云电脑认领任务：先检查状态，已处理中则拒绝（防冲突锁）"""
     # 先读当前状态
     data = cli(["+record-get", "--base-token", BASE, "--table-id", TABLE,
-                "--record-id", rid, "--format", "json", "--as", "user"])
+                "--record-id", rid, "--field-id", "状态", "--field-id", "备注",
+                "--format", "json", "--as", "user"])
     current_status = ""
     remark = ""
     if data and data.get("ok"):
@@ -283,6 +285,7 @@ def claim(rid, instance_name):
         reg.setdefault("instances", {})[instance_name] = inst
         with open(reg_file, 'w', encoding='utf-8') as f:
             json.dump(reg, f, ensure_ascii=False, indent=2)
+        _push_instances()
     except:
         pass
     return True
@@ -320,6 +323,25 @@ def ask(rid, question, instance_name="云电脑"):
     print(f"OK: 问题已提交，等待本地回复")
 
 
+def _push_instances():
+    """把instances.json推到GitHub，两边同步"""
+    try:
+        import requests, base64
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import config
+        H = {'Authorization': f'token {config.GITHUB_PAT}', 'Accept': 'application/vnd.github.v3+json'}
+        REPO = 'han20040706never-dev/attivo-oem-crawler'
+        reg_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "instances.json")
+        content = open(reg_file, 'r', encoding='utf-8').read()
+        r = requests.get(f'https://api.github.com/repos/{REPO}/contents/instances.json', headers=H, timeout=10)
+        sha = r.json().get('sha') if r.status_code == 200 else None
+        p = {'message': 'sync instances.json', 'content': base64.b64encode(content.encode()).decode()}
+        if sha: p['sha'] = sha
+        requests.put(f'https://api.github.com/repos/{REPO}/contents/instances.json', headers=H, json=p, timeout=15)
+    except:
+        pass
+
+
 def register(instance_name, tags_str=""):
     """云电脑实例注册：记录名称、专长标签、活跃度"""
     import datetime
@@ -337,6 +359,7 @@ def register(instance_name, tags_str=""):
     with open(reg_file, 'w', encoding='utf-8') as f:
         json.dump(reg, f, ensure_ascii=False, indent=2)
     print(f"OK: 实例【{instance_name}】已注册，标签: {', '.join(inst['tags']) or '无'}")
+    _push_instances()
 
 
 def recommend(task_type=""):
