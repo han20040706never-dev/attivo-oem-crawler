@@ -572,11 +572,11 @@ def check_heartbeat():
     try:
         import json, datetime, requests
         reg_file = os.path.join(PROJECT, "instances.json")
-        # 先从GitHub拉最新的instances.json（本地可能是旧的）
+        # 先从GitHub拉最新的instances.json（双通道，raw常超时）
         try:
-            r = requests.get(GITHUB_RAW + "instances.json", timeout=15)
-            if r.status_code == 200:
-                remote = r.json()
+            remote_bytes = _fetch_github_file("instances.json")
+            if remote_bytes:
+                remote = json.loads(remote_bytes.decode('utf-8'))
                 with open(reg_file, 'w', encoding='utf-8') as f:
                     json.dump(remote, f, ensure_ascii=False, indent=2)
         except:
@@ -616,6 +616,19 @@ def check_heartbeat():
                     except:
                         last_sc = {}
                 for inst_name, _ in stale:
+                    # 创建前重新验证：心跳可能已恢复（爬虫脚本刚启动时常见）
+                    try:
+                        with open(reg_file, 'r', encoding='utf-8') as f:
+                            reg2 = json.load(f)
+                        inst2 = reg2.get("instances", {}).get(inst_name, {})
+                        last2 = inst2.get("last_seen", "")
+                        if last2:
+                            lt2 = datetime.datetime.fromisoformat(last2.replace("Z", "+00:00").replace("+08:00", ""))
+                            if (now - lt2).total_seconds() / 60 <= 30:
+                                log(f"  {inst_name}心跳已恢复，跳过去自检")
+                                continue
+                    except:
+                        pass
                     last_time = last_sc.get(inst_name, 0)
                     if time.time() - last_time < 1800:  # 30分钟内不重复创建
                         continue
