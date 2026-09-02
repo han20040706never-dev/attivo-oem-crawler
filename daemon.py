@@ -414,7 +414,9 @@ def check_heartbeat():
                 stale.append((name, "心跳时间解析失败"))
         if stale:
             msg = "实例心跳告警: " + ", ".join(f"{n}({s})" for n, s in stale)
+            recovery = "恢复步骤：在对应云电脑上运行 cd C:\\attivo-collab; python daemon.py --instance \"实例名\" --tags \"标签\" --interval 300，或运行 python install_daemon_task.py 注册计划任务保活"
             log(msg)
+            log(recovery)
             # 写入通知文件，本地AI对话开始时可读
             notif_file = os.path.join(PROJECT, "_notifications.json")
             notifs = []
@@ -423,7 +425,7 @@ def check_heartbeat():
                     notifs = json.load(open(notif_file, 'r', encoding='utf-8'))
                 except:
                     notifs = []
-            notifs.append({"time": now.isoformat(), "type": "heartbeat", "msg": msg})
+            notifs.append({"time": now.isoformat(), "type": "heartbeat", "msg": msg, "recovery": recovery})
             notifs = notifs[-20:]
             with open(notif_file, 'w', encoding='utf-8') as f:
                 json.dump(notifs, f, ensure_ascii=False, indent=2)
