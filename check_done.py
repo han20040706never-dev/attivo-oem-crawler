@@ -67,28 +67,33 @@ def main():
     
     if not new_done:
         print(f"无新完成任务（缓存中已处理{len(processed)}个）")
-        return
+    else:
+        print(f"发现{len(new_done)}个新完成任务：")
+        for rid, title, result, remark in new_done:
+            print(f"\n  【{title}】")
+            if result:
+                print(f"  结果: {result[:200]}")
+            try:
+                note = f"[本地已回收 {datetime.datetime.now().strftime('%m-%d %H:%M')}]"
+                new_remark = (remark + "\n" + note).strip() if remark else note
+                cli(["+record-batch-update", "--base-token", BASE, "--table-id", TABLE,
+                     "--json", json.dumps({"records": [{"record_id": rid, "fields": {"备注": new_remark}}]}, ensure_ascii=False),
+                     "--as", "user"])
+            except:
+                pass
+            processed.add(rid)
+        cache["processed"] = list(processed)
+        save_cache(cache)
+        print(f"\n已回收{len(new_done)}个任务，缓存累计{len(processed)}个")
     
-    print(f"发现{len(new_done)}个新完成任务：")
-    for rid, title, result, remark in new_done:
-        print(f"\n  【{title}】")
-        if result:
-            print(f"  结果: {result[:200]}")
-        # 标记已回收（追加到备注）
-        try:
-            note = f"[本地已回收 {datetime.datetime.now().strftime('%m-%d %H:%M')}]"
-            new_remark = (remark + "\n" + note).strip() if remark else note
-            cli(["+record-batch-update", "--base-token", BASE, "--table-id", TABLE,
-                 "--json", json.dumps({"records": [{"record_id": rid, "fields": {"备注": new_remark}}]}, ensure_ascii=False),
-                 "--as", "user"])
-        except:
-            pass
-        processed.add(rid)
-    
-    cache["processed"] = list(processed)
-    cache["last_check"] = datetime.datetime.now().isoformat()
-    save_cache(cache)
-    print(f"\n已回收{len(new_done)}个任务，缓存累计{len(processed)}个")
+    # 无论有无新任务，都触发经验增量同步
+    print("\n--- 经验同步 ---")
+    try:
+        r = subprocess.run([sys.executable, os.path.join(PROJECT, "shared_mem.py"), "sync"],
+                          capture_output=True, text=True, timeout=30, encoding='utf-8')
+        print(r.stdout.strip() if r.stdout else "同步完成")
+    except Exception as e:
+        print(f"经验同步失败: {e}")
 
 if __name__ == "__main__":
     main()
