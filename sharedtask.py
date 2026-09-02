@@ -149,6 +149,37 @@ def view(rid):
         print(chat_log)
 
 
+def complete(rid, result, experience=""):
+    """完成任务并自动回收经验到共享记忆"""
+    set_status(rid, "已完成", result)
+    data = cli(["+record-get", "--base-token", BASE, "--table-id", TABLE,
+                "--record-id", rid, "--format", "json", "--as", "user"])
+    title = ""
+    chat_log = ""
+    if data and data.get("ok"):
+        d = data.get("data", {})
+        rows, cols = d.get("data", []), d.get("fields", [])
+        if rows and cols:
+            fmap = {cols[j]: rows[0][j] for j in range(min(len(cols), len(rows[0])))}
+            title = cell(fmap.get("任务标题"))
+            chat_log = cell(fmap.get("对话日志"))
+    exp = result[:300]
+    if experience:
+        exp += f"\n经验: {experience}"
+    if chat_log:
+        lines = [l for l in chat_log.split("\n") if l.strip()]
+        if len(lines) > 3:
+            exp += "\n关键对话:\n" + "\n".join(lines[-3:])
+    try:
+        import subprocess
+        subprocess.run([sys.executable, "shared_mem.py", "push",
+                        f"[任务完成] {title}", "已完成任务", exp, "脚本"],
+                       capture_output=True, text=True, timeout=30, encoding="utf-8")
+        print("经验已回收到共享记忆")
+    except Exception as e:
+        print(f"经验回收失败: {e}")
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("action")
@@ -170,6 +201,9 @@ def main():
         chat(a.rest[0], a.rest[1], sender)
     elif a.action == "view":
         view(a.rest[0])
+    elif a.action == "complete":
+        # complete <record_id> <结果> [经验]
+        complete(a.rest[0], a.rest[1], a.rest[2] if len(a.rest) > 2 else "")
     else:
         print(__doc__)
 
