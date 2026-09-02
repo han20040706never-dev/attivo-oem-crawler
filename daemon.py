@@ -310,7 +310,48 @@ print(f"DONE: {ok}/{len(sections)} ok, {err} errors")
             except OSError:
                 pass
 
+def should_auto_selfcheck(title):
+    """自检任务自动执行：标题含'自检'或'心跳更新'"""
+    return ("自检" in title) or ("心跳更新" in title)
+
+def auto_selfcheck(rid, title):
+    """云电脑自检：更新心跳+报告状态+代码版本"""
+    try:
+        import datetime, platform
+        # 更新心跳
+        update_heartbeat()
+        # 收集状态
+        status = []
+        status.append(f"时间: {datetime.datetime.now().isoformat()}")
+        status.append(f"实例: {INSTANCE_NAME}")
+        status.append(f"标签: {INSTANCE_TAGS}")
+        status.append(f"Python: {platform.python_version()}")
+        status.append(f"工作目录: {PROJECT}")
+        # 检查关键文件
+        for f in ["daemon.py", "sharedtask.py", "shared_mem.py", "config.py"]:
+            fp = os.path.join(PROJECT, f)
+            if os.path.exists(fp):
+                mtime = datetime.datetime.fromtimestamp(os.path.getmtime(fp)).strftime("%m-%d %H:%M")
+                status.append(f"  {f}: 存在(更新于{mtime})")
+            else:
+                status.append(f"  {f}: 缺失!")
+        # 检查oemkb.db
+        db = os.path.join(PROJECT, "oemkb.db")
+        if os.path.exists(db):
+            import sqlite3
+            conn = sqlite3.connect(db, timeout=10)
+            cnt = conn.execute("SELECT COUNT(*) FROM part").fetchone()[0]
+            conn.close()
+            status.append(f"  oemkb.db: {cnt}零件")
+        result = "自检完成:\n" + "\n".join(status)
+        log(f"  自检完成: {result[:200]}")
+        return result
+    except Exception as e:
+        return f"ERROR: 自检失败 {e}"
+
 def try_auto_execute(rid, title, task_type, content):
+    if should_auto_selfcheck(title):
+        return auto_selfcheck(rid, title)
     if should_auto_execute(title, task_type):
         return auto_execute_crawl(rid, title, content)
     return None
@@ -328,8 +369,8 @@ def _cycle():
                 continue
             if not task_matches_tags(typ, title, INSTANCE_TAGS):
                 continue
-            if not should_auto_execute(title, typ):
-                log(f"  非OEM收尾任务，留给AI: {title}")
+            if not should_auto_execute(title, typ) and not should_auto_selfcheck(title):
+                log(f"  非自动任务，留给AI: {title}")
                 # 指派给本实例的非自动任务，写本地待办通知，云电脑AI可读
                 if not assignee or assignee == INSTANCE_NAME:
                     try:
@@ -471,6 +512,34 @@ def check_heartbeat():
             recovery = "恢复步骤：在对应云电脑上运行 cd C:\\attivo-collab; python daemon.py --instance \"实例名\" --tags \"标签\" --interval 300，或运行 python install_daemon_task.py 注册计划任务保活"
             log(msg)
             log(recovery)
+            # 自动创建自检任务唤醒云电脑（每实例最多一个待处理自检任务）
+            try:
+                sys.path.insert(0, PROJECT)
+                from sharedtask import push, cli, BASE, TABLE, cell
+                for inst_name, _ in stale:
+                    # 检查是否已有待处理的自检任务
+                    data = cli(["+record-list", "--base-token", BASE, "--table-id", TABLE,
+                                "--filter", 'CurrentValue.[状态]="待处理"', "--limit", "50",
+                                "--format", "json", "--as", "user"])
+                    has_selfcheck = False
+                    if data and data.get("ok"):
+                        d = data.get("data", {})
+                        rows, cols = d.get("data", []), d.get("fields", [])
+                        fmap_idx = {name: i for i, name in enumerate(cols)}
+                        for row in rows:
+                            def g2(nm):
+                                i = fmap_idx.get(nm, -1)
+                                return cell(row[i]) if 0 <= i < len(row) else ""
+                            if "自检" in g2("任务标题") and g2("指派给") == inst_name:
+                                has_selfcheck = True
+                                break
+                    if not has_selfcheck:
+                        rid = push("系统维护", f"{inst_name}自检+心跳更新",
+                                   f"云电脑实例【{inst_name}】心跳超时，请执行：1.更新last_seen到instances.json并push 2.报告daemon运行状态 3.报告代码版本。这是自动唤醒任务，daemon应自动执行。",
+                                   "本地豆包(自动唤醒)", inst_name, "高")
+                        log(f"  已发自检任务唤醒{inst_name}: {rid}")
+            except Exception as e2:
+                log(f"  自检任务创建失败: {e2}")
             # 写入通知文件，本地AI对话开始时可读
             notif_file = os.path.join(PROJECT, "_notifications.json")
             notifs = []
