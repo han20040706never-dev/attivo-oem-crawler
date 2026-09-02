@@ -18,6 +18,8 @@ sharedtask.py —— 豆包Agent共享任务库（飞书多维表格）命令行
 import sys, io, os, json, subprocess, argparse
 sys.stdout = io.TextIOWrapper(sys.stdout.detach(), encoding="utf-8")
 PROJECT = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, PROJECT)
+from common import cli, cell, parse_matrix
 
 BASE = "MYQybnKkZaXY2Yswagyc7pKNnRf"
 TABLE = "tblGwGpuGna0zGQG"
@@ -25,36 +27,6 @@ TYPES = {"信息调研", "内容生产", "文件处理", "代码开发", "数据
 STATUSES = {"待处理", "处理中", "已完成", "已取消", "已失败"}
 FIELDS = ["任务编号", "任务标题", "任务类型", "任务内容", "来源", "状态", "结果", "备注", "对话日志", "指派给", "优先级"]
 PRIORITY_ORDER = {"高": 0, "中": 1, "低": 2}
-
-
-def cli(args):
-    r = subprocess.run(["lark-cli", "base"] + args, capture_output=True,
-                       text=True, encoding="utf-8", errors="replace", timeout=120)
-    if r.returncode != 0:
-        print("LARK_ERR:", (r.stderr or r.stdout)[-400:]); return None
-    try:
-        return json.loads(r.stdout)
-    except Exception:
-        print(r.stdout[:800]); return None
-
-
-def parse_matrix(data):
-    """record-list --format json 返回矩阵：data.data行 + data.fields列名 + record_id_list，按索引对齐"""
-    d = (data or {}).get("data", {})
-    rows, cols, rids = d.get("data", []), d.get("fields", []), d.get("record_id_list", [])
-    out = []
-    for i, row in enumerate(rows):
-        f = {cols[j]: row[j] for j in range(min(len(cols), len(row)))}
-        out.append((rids[i] if i < len(rids) else "", f))
-    return out
-
-
-def cell(v):
-    if isinstance(v, list):
-        return "/".join(cell(x) for x in v if x)
-    if isinstance(v, dict):
-        return v.get("text") or v.get("name") or str(v)
-    return "" if v is None else str(v)
 
 
 def list_by_status(status=None):
