@@ -3,6 +3,14 @@
 > 每次任务开始先读此文件。只记纠正、决策、偏好变更，不记临时过程。
 > 格式：日期 + 要点，追加在最上面。
 
+## 2026-09-03 凌晨7小时持续优化轮（进行中）
+- **3实例架构成型**：①云电脑 价格监控(Windows,标签:价格监控/公开信息调研/数据整理) ②云电脑 爬虫脚本(Windows,标签:爬虫/数据整理/配件查询) ③开发助手(Linux容器,标签:代码开发/重构/bug修复/脚本优化)。开发助手用nohup启动，需加cron @reboot保活。
+- **auto_dispatch v2.0**：全实例评分排名(不只返回最佳)、置信度(高≥25/中≥15/低<15)、push后自动设置"指派给"字段、心跳状态感知(在线+5/超时>120min-10)、分类修复(代码开发规则移到首位防"重构爬虫"被"爬"匹配成数据整理)、TAG_KEYWORDS加代码开发/重构/bug修复/脚本优化。
+- **code_quality_gate.py v1.0**：自动验证重构代码(py_compile语法/硬编码密钥扫描/危险模式os.system+eval+exec+shell=True/import完整性)，config.py豁免密钥扫描。开发助手提交后本地必须跑此门禁。
+- **4个重构任务已派发开发助手**：①Linux保活cron @reboot ②爬虫统一基类crawler_base.py(15个爬虫去重) ③Odoo统一封装odoo_client.py(10+脚本去重) ④工具脚本统一import common.py(20+脚本去重)。
+- **7小时持续优化cron**：cron_job_id=11602022734850，每30分钟触发，到2026-09-03 08:00截止，自动检查心跳/审核重构代码/派发新任务/更新状态。
+- **关键教训**：daemon只自动执行爬虫和自检任务，代码开发类任务写到_pending_ai_tasks.txt等云电脑AI手动处理，不是bug是设计。PowerShell绝不内联Python(JSON花括号必炸)，写.py文件执行。
+
 ## 2026-09-02
 - **协作系统v3.1关键修复（晚间深度优化轮）**：①claim加指派人过滤（不能抢指派给其他实例的任务，之前价格监控抢了爬虫脚本的3个任务导致假完成）②daemon加update_heartbeat（实例每次巡检自动更新last_seen到instances.json并push GitHub，之前register只在部署时调一次导致心跳永远不更新）③check_heartbeat先pull GitHub最新instances.json再检查（之前读本地旧文件看不到云电脑心跳）④心跳唤醒机制（心跳超30分钟自动创建高优先级自检任务指派给对应实例，云电脑daemon的auto_selfcheck自动执行更新心跳，无需用户干预）⑤ai_router.py修os未import bug ⑥lark-cli +record-list用--filter-json不是--filter ⑦3个被假完成的爬虫任务已取消并重发
 - **业务数据洞察（已拉取分析，待用户指示再行动）**：200商机/40订单；75个商机提到90-300马力，38个停在New未跟进；福建成交率远高于浙江（Won27个里福建18个，浙江仅4个）；复购率仅19%（6/32）；8月订单26单（7月13单）；高价值未跟进：舟山海舸/漳州优艇汇/泉州王荣/厦门星海航/合肥大伟/宁德博浪船厂/霞浦阿胜/宿迁胡先生/福州长乐松下镇
@@ -194,3 +202,16 @@
 - 备注默认 <p><b>YYYY.M.D初次加上微信</b></p> 加粗
 - 用户没说来源绝不自己填；用户没说日期用当天
 - 建完必须回读验证 state/city/source/type/description 全部正确
+
+## 2026-09-03 协作系统深度优化轮（37项改进）
+- 心跳唤醒机制验证成功：云电脑爬虫脚本daemon停了8小时后，自检任务自动唤醒，auto_selfcheck执行，心跳恢复，complete任务。全链路无需人工干预。
+- pending_count=0根因：update_state用run([sharedtask.py,pending],timeout=20)，飞书API慢导致超时返回ERROR，不含'待处理'所以count=0。修复：改用cli()直接查询。
+- 自检任务重复创建根因：check_heartbeat用raw.githubusercontent.com拉instances.json超时，读到本地旧文件认为心跳仍超时。修复：用_fetch_github_file双通道拉取，创建前重新验证。
+- tags格式坑：instances.json里爬虫脚本的tags是字符串'爬虫,数据整理,配件查询'不是数组，导致标签匹配失败。修复：统一为数组。
+- auto_dispatch_pending验证成功：自动扫描无指派人任务，机密任务正确跳过（config相关），非机密任务自动指派给推荐实例。
+- health.py一键健康检查：输出daemon状态/实例心跳/任务统计/零件库进度/通知/代码版本，新对话不用逐个查。
+- daemon日志轮转：超1MB截断保留最近500行。
+- 经验质量评分：complete时AI提取经验后评分0-5，≤1分不push防垃圾经验污染共享记忆。
+- token告警：DeepSeek API每天超3元写通知告警。
+- 负载感知：active_tasks追踪，推荐时负载高的实例降权。
+- 关键教训：subprocess调用外部脚本+短timeout=不可靠，能用cli()直接import就别用subprocess。
