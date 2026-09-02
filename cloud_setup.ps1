@@ -39,13 +39,24 @@ Write-Host "安装Python依赖..."
 pip install requests 2>$null | Out-Null
 Write-Host "  requests OK"
 
-# 5. 检查lark-cli
+# 5. 检查并安装lark-cli
 $larkOk = $false
 try { $larkOk = (Get-Command lark-cli -ErrorAction Stop) -ne $null } catch {}
 if ($larkOk) {
     Write-Host "  lark-cli OK"
 } else {
-    Write-Host "  警告: lark-cli未安装，飞书共享任务/记忆功能不可用" -ForegroundColor Yellow
+    Write-Host "  安装lark-cli..."
+    try {
+        npm install -g @larksuite/lark-cli 2>&1 | Out-Null
+        $larkOk = (Get-Command lark-cli -ErrorAction Stop) -ne $null
+        if ($larkOk) { Write-Host "  lark-cli 安装成功" }
+    } catch {
+        Write-Host "  npm安装失败，尝试下载..." -ForegroundColor Yellow
+    }
+    if (-not $larkOk) {
+        Write-Host "  警告: lark-cli安装失败，请手动安装: npm install -g @larksuite/lark-cli" -ForegroundColor Yellow
+        Write-Host "  飞书共享任务/记忆功能将不可用" -ForegroundColor Yellow
+    }
 }
 
 # 6. 验证
