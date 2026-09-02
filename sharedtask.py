@@ -17,6 +17,7 @@ sharedtask.py —— 豆包Agent共享任务库（飞书多维表格）命令行
 """
 import sys, io, os, json, subprocess, argparse
 sys.stdout = io.TextIOWrapper(sys.stdout.detach(), encoding="utf-8")
+PROJECT = os.path.dirname(os.path.abspath(__file__))
 
 BASE = "MYQybnKkZaXY2Yswagyc7pKNnRf"
 TABLE = "tblGwGpuGna0zGQG"
@@ -222,7 +223,7 @@ def complete(rid, result, experience=""):
         import subprocess
         subprocess.run([sys.executable, "shared_mem.py", "push",
                         f"[任务完成] {title}", "已完成任务", final_exp, "脚本"],
-                       capture_output=True, text=True, timeout=60, encoding="utf-8")
+                       capture_output=True, text=True, timeout=60, encoding="utf-8", cwd=PROJECT)
         print("经验已AI提取并回收到共享记忆")
     except Exception as e:
         print(f"经验回收失败: {e}")
@@ -401,22 +402,56 @@ def list_questions():
 
 
 def _push_instances():
-    """把instances.json推到GitHub，两边同步"""
+    """pull-merge-push instances.json到GitHub，避免双边覆盖互冲"""
     try:
         import requests, base64
-        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        sys.path.insert(0, PROJECT)
         import config
         H = {'Authorization': f'token {config.GITHUB_PAT}', 'Accept': 'application/vnd.github.v3+json'}
         REPO = 'han20040706never-dev/attivo-oem-crawler'
-        reg_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "instances.json")
-        content = open(reg_file, 'r', encoding='utf-8').read()
+        reg_file = os.path.join(PROJECT, "instances.json")
+        # 1. 读本地
+        local = {"instances": {}}
+        if os.path.exists(reg_file):
+            with open(reg_file, 'r', encoding='utf-8') as f:
+                local = json.load(f)
+        # 2. pull GitHub
+        remote = {"instances": {}}
+        sha = None
         r = requests.get(f'https://api.github.com/repos/{REPO}/contents/instances.json', headers=H, timeout=10)
-        sha = r.json().get('sha') if r.status_code == 200 else None
-        p = {'message': 'sync instances.json', 'content': base64.b64encode(content.encode()).decode()}
+        if r.status_code == 200:
+            sha = r.json().get('sha')
+            try:
+                remote = json.loads(base64.b64decode(r.json()["content"]).decode('utf-8'))
+            except:
+                pass
+        # 3. merge：按实例名并集，计数取max，标签取并集
+        merged = {"instances": {}}
+        all_names = set(list(local.get("instances", {}).keys()) + list(remote.get("instances", {}).keys()))
+        for name in all_names:
+            li = local.get("instances", {}).get(name, {})
+            ri = remote.get("instances", {}).get(name, {})
+            merged_inst = {
+                "tags": list(set(li.get("tags", []) + ri.get("tags", []))),
+                "completed": max(li.get("completed", 0), ri.get("completed", 0)),
+                "failed": max(li.get("failed", 0), ri.get("failed", 0)),
+                "last_seen": max(li.get("last_seen", ""), ri.get("last_seen", "")),
+            }
+            merged["instances"][name] = merged_inst
+        # 4. 写回本地
+        with open(reg_file, 'w', encoding='utf-8') as f:
+            json.dump(merged, f, ensure_ascii=False, indent=2)
+        # 5. push
+        content = json.dumps(merged, ensure_ascii=False, indent=2)
+        p = {'message': 'pull-merge-push instances.json', 'content': base64.b64encode(content.encode()).decode()}
         if sha: p['sha'] = sha
         requests.put(f'https://api.github.com/repos/{REPO}/contents/instances.json', headers=H, json=p, timeout=15)
-    except:
-        pass
+    except Exception as e:
+        try:
+            with open(os.path.join(PROJECT, "_daemon.log"), 'a', encoding='utf-8') as f:
+                f.write(f"[push_instances失败] {e}\n")
+        except:
+            pass
 
 
 def register(instance_name, tags_str=""):
@@ -487,7 +522,7 @@ def fail(rid, reason, instance_name="云电脑"):
         exp = f"任务: {task_content[:100]}\n失败原因: {reason}\n执行者: {instance_name}"
         subprocess.run([sys.executable, "shared_mem.py", "push",
                         f"[任务失败] {title}", "踩坑教训", exp, "脚本"],
-                       capture_output=True, text=True, timeout=60, encoding="utf-8")
+                       capture_output=True, text=True, timeout=60, encoding="utf-8", cwd=PROJECT)
         print("失败原因已记录到共享记忆(踩坑教训)")
     except Exception as e:
         print(f"经验记录失败: {e}")
