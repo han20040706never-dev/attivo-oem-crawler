@@ -60,17 +60,33 @@ def search(keyword):
 
 
 def relevant(keywords, top_n=5):
-    """多关键词相关度检索：按匹配关键词数量排序，返回最相关的经验"""
+    """多关键词相关度检索：同义词扩展+按匹配数量排序"""
     kws = [k.strip().lower() for k in keywords.split() if k.strip()]
     if not kws:
         print("请提供关键词"); return
+    # 同义词扩展
+    syn_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "synonyms.json")
+    expanded = set(kws)
+    if os.path.exists(syn_file):
+        try:
+            with open(syn_file, 'r', encoding='utf-8') as f:
+                syns = json.load(f)
+            for kw in kws:
+                for term, alist in syns.items():
+                    if kw == term.lower() or kw in [a.lower() for a in alist]:
+                        expanded.add(term.lower())
+                        for a in alist:
+                            expanded.add(a.lower())
+        except:
+            pass
+    expanded = list(expanded)
     mem_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "SHARED_MEMORY.md")
     results = []
     if os.path.exists(mem_file):
         with open(mem_file, 'r', encoding='utf-8') as f:
             lines = f.readlines()
         for i, line in enumerate(lines):
-            score = sum(1 for kw in kws if kw in line.lower())
+            score = sum(1 for kw in expanded if kw in line.lower())
             if score > 0:
                 start = max(0, i - 1)
                 end = min(len(lines), i + 3)
@@ -98,13 +114,13 @@ def relevant(keywords, top_n=5):
                 content = g("内容")
                 mtype = g("类型")
                 text = f"{title} {content}".lower()
-                score = sum(1 for kw in kws if kw in text)
+                score = sum(1 for kw in expanded if kw in text)
                 if score > 0:
                     results.append((score, f"[飞书|{mtype}]", f"{title}: {content[:150]}"))
     except Exception as e:
         print(f"飞书检索失败: {e}")
     results.sort(key=lambda x: -x[0])
-    print(f"=== 相关经验（关键词:{kws}，命中{len(results)}条，Top{top_n}） ===")
+    print(f"=== 相关经验（原始词:{kws}，扩展后{len(expanded)}词，命中{len(results)}条，Top{top_n}） ===")
     for score, src, ctx in results[:top_n]:
         print(f"  匹配{score}词 {src} {ctx}")
     if not results:
