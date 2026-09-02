@@ -170,15 +170,20 @@ def view(rid):
 
 
 def _bump_instance(instance_name, field="completed"):
-    """更新实例完成/失败计数"""
+    """更新实例完成/失败计数，或调整active_tasks（field="active_inc"/"active_dec"）"""
     try:
         reg_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "instances.json")
         reg = {}
         if os.path.exists(reg_file):
             with open(reg_file, 'r', encoding='utf-8') as f:
                 reg = json.load(f)
-        inst = reg.get("instances", {}).get(instance_name, {"tags": [], "completed": 0, "failed": 0})
-        inst[field] = inst.get(field, 0) + 1
+        inst = reg.get("instances", {}).get(instance_name, {"tags": [], "completed": 0, "failed": 0, "active_tasks": 0})
+        if field == "active_inc":
+            inst["active_tasks"] = inst.get("active_tasks", 0) + 1
+        elif field == "active_dec":
+            inst["active_tasks"] = max(0, inst.get("active_tasks", 0) - 1)
+        else:
+            inst[field] = inst.get(field, 0) + 1
         reg.setdefault("instances", {})[instance_name] = inst
         with open(reg_file, 'w', encoding='utf-8') as f:
             json.dump(reg, f, ensure_ascii=False, indent=2)
@@ -283,6 +288,7 @@ def complete(rid, result, experience=""):
     except:
         pass
     if claimant:
+        _bump_instance(claimant, "active_dec")
         _bump_instance(claimant, "completed")
 
 
@@ -353,6 +359,7 @@ def claim(rid, instance_name):
          "--json", json.dumps({"update_records": {rid: {"备注": new_remark}}}, ensure_ascii=False),
          "--as", "user"])
     print(f"OK: 【{instance_name}】已认领任务 {rid}")
+    _bump_instance(instance_name, "active_inc")
     # 自动注册实例到instances.json
     try:
         import datetime
@@ -587,6 +594,7 @@ def fail(rid, reason, instance_name="云电脑"):
     except Exception as e:
         print(f"经验记录失败: {e}")
     print(f"FAIL: 任务{rid}已标记失败 - {reason}")
+    _bump_instance(instance_name, "active_dec")
     _bump_instance(instance_name, "failed")
 
 
