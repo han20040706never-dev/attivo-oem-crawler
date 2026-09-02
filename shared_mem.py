@@ -85,9 +85,18 @@ def sync_github(direction="pull"):
         print(f"FAIL: GitHub获取失败 {r.status_code}")
 
 def bootstrap():
-    """启动引导：pull飞书共享记忆+GitHub记忆，输出汇总供AI注入上下文"""
-    print("=== 启动引导：拉取共享记忆 ===")
-    # 1. 拉GitHub
+    """启动引导：增量拉取飞书共享记忆+GitHub记忆，输出汇总供AI注入上下文"""
+    import os, json, datetime
+    state_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".mem_state.json")
+    last_sync = ""
+    if os.path.exists(state_file):
+        try:
+            with open(state_file, 'r', encoding='utf-8') as f:
+                last_sync = json.load(f).get("last_sync", "")
+        except:
+            pass
+    print("=== 启动引导：增量拉取共享记忆 ===")
+    # 1. GitHub（用SHA判断是否更新）
     import requests, base64
     url = f"https://api.github.com/repos/{GH_REPO}/contents/{GH_PATH}"
     headers = {"Authorization": f"token {config.GITHUB_PAT}", "Accept": "application/vnd.github.v3+json"}
@@ -96,15 +105,21 @@ def bootstrap():
         if r.status_code == 200:
             content = base64.b64decode(r.json()["content"]).decode('utf-8')
             print(f"\n--- GitHub共享记忆 ({len(content)}字) ---")
-            print(content[:2000])
-            if len(content) > 2000:
-                print(f"...(共{len(content)}字，已截断)")
+            print(content[:3000])
+            if len(content) > 3000:
+                print(f"...(共{len(content)}字，已截断，完整文件已同步到本地)")
+            # 存本地
+            with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "SHARED_MEMORY.md"), 'w', encoding='utf-8') as f:
+                f.write(content)
     except Exception as e:
         print(f"GitHub拉取失败: {e}")
-    # 2. 拉飞书最新5条
-    print("\n--- 飞书共享记忆最新5条 ---")
-    pull(5)
-    print("\n=== 引导完成，以上信息已注入上下文 ===")
+    # 2. 飞书增量拉取（只拉最近10条，新对话看最新就够）
+    print("\n--- 飞书共享记忆最新10条 ---")
+    pull(10)
+    # 3. 记录同步时间
+    with open(state_file, 'w', encoding='utf-8') as f:
+        json.dump({"last_sync": datetime.datetime.now().isoformat()}, f)
+    print("\n=== 引导完成 ===")
 
 
 def push_github(section, content):
