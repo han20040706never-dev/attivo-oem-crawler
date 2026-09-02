@@ -187,3 +187,15 @@
 - 备注默认 <p><b>YYYY.M.D初次加上微信</b></p> 加粗
 - 用户没说来源绝不自己填；用户没说日期用当天
 - 建完必须回读验证 state/city/source/type/description 全部正确
+
+## 2026-09-03 协作系统深度优化轮（37项改进）
+- 心跳唤醒机制验证成功：云电脑爬虫脚本daemon停了8小时后，自检任务自动唤醒，auto_selfcheck执行，心跳恢复，complete任务。全链路无需人工干预。
+- pending_count=0根因：update_state用run([sharedtask.py,pending],timeout=20)，飞书API慢导致超时返回ERROR，不含'待处理'所以count=0。修复：改用cli()直接查询。
+- 自检任务重复创建根因：check_heartbeat用raw.githubusercontent.com拉instances.json超时，读到本地旧文件认为心跳仍超时。修复：用_fetch_github_file双通道拉取，创建前重新验证。
+- tags格式坑：instances.json里爬虫脚本的tags是字符串'爬虫,数据整理,配件查询'不是数组，导致标签匹配失败。修复：统一为数组。
+- auto_dispatch_pending验证成功：自动扫描无指派人任务，机密任务正确跳过（config相关），非机密任务自动指派给推荐实例。
+- health.py一键健康检查：输出daemon状态/实例心跳/任务统计/零件库进度/通知/代码版本，新对话不用逐个查。
+- daemon日志轮转：超1MB截断保留最近500行。
+- 经验质量评分：complete时AI提取经验后评分0-5，≤1分不push防垃圾经验污染共享记忆。
+- 负载感知：active_tasks追踪，推荐时负载高的实例降权。
+- 关键教训：subprocess调用外部脚本+短timeout=不可靠，能用cli()直接import就别用subprocess。
