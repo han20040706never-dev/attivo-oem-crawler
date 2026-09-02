@@ -242,10 +242,11 @@ def claim(rid, instance_name):
     """云电脑认领任务：先检查状态，已处理中则拒绝（防冲突锁）"""
     # 先读当前状态
     data = cli(["+record-get", "--base-token", BASE, "--table-id", TABLE,
-                "--record-id", rid, "--field-id", "状态", "--field-id", "备注",
+                "--record-id", rid, "--field-id", "状态", "--field-id", "备注", "--field-id", "任务标题",
                 "--format", "json", "--as", "user"])
     current_status = ""
     remark = ""
+    task_title = ""
     if data and data.get("ok"):
         d = data.get("data", {})
         rows, cols = d.get("data", []), d.get("fields", [])
@@ -253,6 +254,7 @@ def claim(rid, instance_name):
             fmap = {cols[j]: rows[0][j] for j in range(min(len(cols), len(rows[0])))}
             current_status = cell(fmap.get("状态"))
             remark = cell(fmap.get("备注"))
+            task_title = cell(fmap.get("任务标题"))
     # 锁检查：已处理中则拒绝
     if current_status == "处理中":
         existing_claimant = ""
@@ -280,6 +282,17 @@ def claim(rid, instance_name):
     if not verified:
         print(f"FAIL: 任务{rid}认领后状态未变更，写入可能失败")
         return False
+    # 经验注入：自动搜索相关历史经验，追加到任务对话日志
+    try:
+        import subprocess as _sp
+        _proj = os.path.dirname(os.path.abspath(__file__))
+        _r = _sp.run([sys.executable, os.path.join(_proj, "shared_mem.py"), "relevant", task_title],
+                     capture_output=True, text=True, timeout=20, encoding='utf-8', cwd=_proj)
+        if _r.stdout and "未找到" not in _r.stdout and len(_r.stdout.strip()) > 20:
+            _exp = _r.stdout.strip()[:500]
+            chat(rid, f"【相关历史经验自动注入】\n{_exp}", "系统")
+    except Exception:
+        pass
     chat(rid, f"我是【{instance_name}】，已认领此任务，开始执行", instance_name)
     new_remark = f"{remark}\n认领者: {instance_name}".strip()
     cli(["+record-batch-update", "--base-token", BASE, "--table-id", TABLE,
