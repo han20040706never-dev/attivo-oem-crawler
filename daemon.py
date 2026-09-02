@@ -56,6 +56,15 @@ def log(msg):
     try:
         with open(LOG_FILE, 'a', encoding='utf-8') as f:
             f.write(line + "\n")
+        # 日志轮转：超过1MB则截断保留最近500行
+        if os.path.getsize(LOG_FILE) > 1024 * 1024:
+            try:
+                with open(LOG_FILE, 'r', encoding='utf-8') as f:
+                    lines = f.readlines()
+                with open(LOG_FILE, 'w', encoding='utf-8') as f:
+                    f.writelines(lines[-500:])
+            except Exception:
+                pass
     except OSError:
         pass
 
