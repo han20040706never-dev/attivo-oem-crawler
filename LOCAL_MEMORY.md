@@ -3,6 +3,12 @@
 > 每次任务开始先读此文件。只记纠正、决策、偏好变更，不记临时过程。
 > 格式：日期 + 要点，追加在最上面。
 
+## 2026-09-03 02:31轮（7小时优化第4轮）
+- **修复daemon重复创建自检任务bug**：check_heartbeat原来只用本地_selfcheck_cache.json时间去重，缓存过期或丢失就重复创建。增强为：创建前先查飞书任务表中是否已有该实例的待处理自检任务，有则跳过。本地daemon已重启(PID=40508)，已推送GitHub。
+- **清理2个重复自检任务**：价格监控和开发助手各保留1个，取消2个重复。
+- **云电脑状态**：价格监控超时122分钟、开发助手超时89分钟，两台daemon都停了。自检任务已创建但无人处理，需用户手动重启云电脑daemon。爬虫脚本在线。
+- **飞书API间歇性故障**：LARK_ERR invalid_response持续出现，自动恢复，不影响核心功能。
+
 ## 2026-09-03 02:05轮（7小时优化第3轮）
 - **修复crawl_brand.py兼容性**：crawl_oem_tree.py v2.0改造为OEMTreeCrawler类后，crawl_brand.py用`import crawl_oem_tree as C`访问模块级变量会坏。已修复：OEMTreeCrawler添加db_path/delay参数，crawl_brand.py v2.0用`with OEMTreeCrawler(db_path=..., delay=...) as c:`。两文件通过门禁已推送。
 - **云电脑状态**：价格监控超时95分钟、开发助手超时62分钟，两台daemon可能都停了（Linux容器nohup进程无保活）。自检任务已创建但无人处理，需用户手动重启云电脑daemon。爬虫脚本在线。
