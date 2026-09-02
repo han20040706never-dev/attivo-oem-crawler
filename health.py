@@ -107,7 +107,74 @@ try:
 except Exception as e:
     print(f"  读取失败: {e}")
 
-# 6. 代码版本
+# 6. 代码质量
+print("\n【代码质量】")
+try:
+    cq_files = ["daemon.py", "sharedtask.py", "shared_mem.py", "auto_dispatch.py", "ai_router.py", "common.py", "code_quality_gate.py"]
+    cq_existing = [f for f in cq_files if os.path.exists(os.path.join(PROJECT, f))]
+    import py_compile
+    cq_pass, cq_fail = 0, 0
+    for f in cq_existing:
+        try:
+            py_compile.compile(os.path.join(PROJECT, f), doraise=True)
+            cq_pass += 1
+        except Exception:
+            cq_fail += 1
+            print(f"  ❌ {f}: 语法错误")
+    print(f"  语法检查: {cq_pass}通过, {cq_fail}失败 (共{len(cq_existing)}个核心文件)")
+    # 硬编码密钥扫描（config.py除外）
+    import re
+    secret_hits = 0
+    for f in cq_existing:
+        if f == "config.py":
+            continue
+        content = open(os.path.join(PROJECT, f), 'r', encoding='utf-8').read()
+        if re.search(r'sk-[a-zA-Z0-9]{20,}', content) or re.search(r'ghp_[a-zA-Z0-9]{30,}', content):
+            secret_hits += 1
+            print(f"  ⚠️  {f}: 疑似硬编码密钥")
+    if secret_hits == 0:
+        print(f"  密钥扫描: 无硬编码密钥")
+except Exception as e:
+    print(f"  检查失败: {e}")
+
+# 7. Token用量
+print("\n【AI Token用量】")
+try:
+    token_file = os.path.join(PROJECT, "_token_usage.jsonl")
+    if os.path.exists(token_file):
+        lines = open(token_file, 'r', encoding='utf-8').readlines()
+        today = datetime.datetime.now().strftime("%Y-%m-%d")
+        today_calls = sum(1 for l in lines if today in l)
+        total_input = sum(json.loads(l).get("input_tokens", 0) for l in lines if l.strip())
+        total_output = sum(json.loads(l).get("output_tokens", 0) for l in lines if l.strip())
+        cost = total_input / 1e6 * 1 + total_output / 1e6 * 2  # DeepSeek价格
+        print(f"  总调用: {len(lines)}次 (今日{today_calls}次)")
+        print(f"  总token: 输入{total_input:,} + 输出{total_output:,}")
+        print(f"  估算费用: ¥{cost:.2f} (DeepSeek API)")
+    else:
+        print("  无用量记录")
+except Exception as e:
+    print(f"  读取失败: {e}")
+
+# 8. 云电脑待办AI任务
+print("\n【云电脑待办AI任务】")
+try:
+    for inst_name in ["云电脑 价格监控", "云电脑 爬虫脚本", "开发助手"]:
+        pending_file = os.path.join(PROJECT, f"_pending_ai_tasks.txt")
+        if os.path.exists(pending_file):
+            lines = [l.strip() for l in open(pending_file, 'r', encoding='utf-8').readlines() if l.strip()]
+            if lines:
+                print(f"  {inst_name}: {len(lines)}个待AI处理")
+                for l in lines[:2]:
+                    print(f"    {l[:70]}")
+            else:
+                print(f"  {inst_name}: 无待办")
+        else:
+            print(f"  {inst_name}: 无待办文件")
+except Exception as e:
+    print(f"  检查失败: {e}")
+
+# 9. 代码版本
 print("\n【代码版本】")
 try:
     ver_file = os.path.join(PROJECT, "VERSION")
