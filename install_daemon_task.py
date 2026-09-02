@@ -1,34 +1,30 @@
 # -*- coding: utf-8 -*-
 """
-注册Windows计划任务，每5分钟触发一次daemon.py --once
-替代常驻进程，解决云沙箱回收导致daemon死亡的问题
+注册Windows计划任务，每5分钟触发一次daemon.py --once（v1.1 dsh审查修复版）
+修复：执行限额60分钟（爬虫600s+开销，10分钟会被硬杀）、XML特殊字符转义
 用法：python install_daemon_task.py --instance "云电脑 爬虫脚本" --tags "爬虫,数据整理,配件查询"
 """
-import sys, io, os, subprocess, argparse
+import sys, io, os, subprocess, argparse, xml.sax.saxutils as sax
 sys.stdout = io.TextIOWrapper(sys.stdout.detach(), encoding='utf-8')
 PROJECT = os.path.dirname(os.path.abspath(__file__))
 PY = sys.executable
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--instance", required=True, help="实例名称")
-    p.add_argument("--tags", required=True, help="专长标签，逗号分隔")
-    p.add_argument("--interval", type=int, default=5, help="触发间隔分钟，默认5")
+    p.add_argument("--instance", required=True)
+    p.add_argument("--tags", required=True)
+    p.add_argument("--interval", type=int, default=5)
+    p.add_argument("--limit-min", type=int, default=60, help="执行时间上限分钟，默认60")
     a = p.parse_args()
 
     task_name = f"AttivoDaemon_{a.instance.replace(' ', '_')}"
     script_path = os.path.join(PROJECT, "daemon.py")
-    cmd = f'"{PY}" "{script_path}" --instance "{a.instance}" --tags "{a.tags}" --once'
+    esc = lambda s: sax.escape(s, {'"': '&quot;'})
 
-    # 先删除旧任务
-    subprocess.run(["schtasks", "/Delete", "/TN", task_name, "/F"],
-                   capture_output=True, text=True)
-
-    # 创建计划任务：每5分钟触发一次，持续无限期
     xml = f'''<?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
   <RegistrationInfo>
-    <Description>Attivo协作系统daemon - {a.instance}</Description>
+    <Description>Attivo协作系统daemon - {esc(a.instance)}</Description>
   </RegistrationInfo>
   <Triggers>
     <TimeTrigger>
@@ -52,17 +48,19 @@ def main():
     <Hidden>false</Hidden>
     <RunOnlyIfIdle>false</RunOnlyIfIdle>
     <WakeToRun>false</WakeToRun>
-    <ExecutionTimeLimit>PT10M</ExecutionTimeLimit>
+    <ExecutionTimeLimit>PT{a.limit_min}M</ExecutionTimeLimit>
     <Priority>7</Priority>
   </Settings>
   <Actions Context="Author">
     <Exec>
-      <Command>{PY}</Command>
-      <Arguments>"{script_path}" --instance "{a.instance}" --tags "{a.tags}" --once</Arguments>
-      <WorkingDirectory>{PROJECT}</WorkingDirectory>
+      <Command>{esc(PY)}</Command>
+      <Arguments>{esc(f'"{script_path}" --instance "{a.instance}" --tags "{a.tags}" --once')}</Arguments>
+      <WorkingDirectory>{esc(PROJECT)}</WorkingDirectory>
     </Exec>
   </Actions>
 </Task>'''
+
+    subprocess.run(["schtasks", "/Delete", "/TN", task_name, "/F"], capture_output=True, text=True)
 
     xml_path = os.path.join(PROJECT, "_daemon_task.xml")
     with open(xml_path, 'w', encoding='utf-16') as f:
@@ -74,20 +72,15 @@ def main():
     if r.returncode != 0:
         print(f"ERROR: {r.stderr}")
         return
-
-    # 清理临时xml
     if os.path.exists(xml_path):
         os.remove(xml_path)
 
-    # 验证
     r2 = subprocess.run(["schtasks", "/Query", "/TN", task_name, "/FO", "LIST"],
                         capture_output=True, text=True)
     print(r2.stdout)
-    print(f"\n✅ 计划任务已注册：{task_name}")
-    print(f"   每{a.interval}分钟触发一次 daemon.py --once")
-    print(f"   实例：{a.instance}")
-    print(f"   标签：{a.tags}")
-    print(f"   沙箱回收不影响（系统级计划任务）")
+    print(f"✅ 计划任务已注册：{task_name}")
+    print(f"   每{a.interval}分钟触发，执行上限{a.limit_min}分钟")
+    print(f"   实例：{a.instance}，标签：{a.tags}")
 
 if __name__ == "__main__":
     main()
