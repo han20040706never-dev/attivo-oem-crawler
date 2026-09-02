@@ -1,0 +1,10 @@
+config.py
+_last_sync.txt
+sync_log.txt
+__pycache__/
+*.pyc
+*.xml
+*.json
+!package.json
+
+.odoo_cache.json
