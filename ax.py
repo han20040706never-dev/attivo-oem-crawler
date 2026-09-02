@@ -513,6 +513,63 @@ def cmd_memory(args):
     if r.returncode != 0:
         print(r.stderr.strip()[-300:])
 
+def cmd_collab(args):
+    """协作系统统一入口: ax collab health | dispatch "任务" [--title T] | pending | instances | quality <files> | tasks
+    示例: ax collab health  # 一键健康检查
+          ax collab dispatch "爬取boats.net配件数据"  # 智能派发任务
+          ax collab pending  # 待处理任务
+          ax collab instances  # 云电脑实例状态
+          ax collab quality daemon.py sharedtask.py  # 代码质量门禁
+    """
+    import subprocess, json, os
+    PROJECT = os.path.dirname(os.path.abspath(__file__))
+    if not args:
+        print(cmd_collab.__doc__)
+        return
+    sub = args[0]
+    rest = args[1:]
+    if sub == "health":
+        r = subprocess.run([sys.executable, "health.py"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60, cwd=PROJECT)
+        print(r.stdout.strip())
+    elif sub == "dispatch":
+        r = subprocess.run([sys.executable, "auto_dispatch.py"] + rest, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60, cwd=PROJECT)
+        print(r.stdout.strip())
+        if r.stderr: print(r.stderr.strip()[-300:])
+    elif sub == "pending":
+        r = subprocess.run([sys.executable, "sharedtask.py", "pending"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30, cwd=PROJECT)
+        print(r.stdout.strip())
+    elif sub == "instances":
+        try:
+            inst = json.load(open(os.path.join(PROJECT, "instances.json"), 'r', encoding='utf-8'))
+            import datetime
+            now = datetime.datetime.now()
+            for name, info in inst.get("instances", {}).items():
+                last = info.get("last_seen", "")
+                tags = info.get("tags", [])
+                if isinstance(tags, str): tags = [t.strip() for t in tags.split(",")]
+                status = "未知"
+                if last:
+                    try:
+                        lt = datetime.datetime.fromisoformat(last.replace("Z", "+00:00").replace("+08:00", ""))
+                        elapsed = (now - lt).total_seconds() / 60
+                        status = "在线" if elapsed <= 30 else f"超时({elapsed:.0f}分钟)"
+                    except: status = "心跳解析失败"
+                print(f"  {name}: {status} | 完成{info.get('completed',0)} 失败{info.get('failed',0)} 进行中{info.get('active_tasks',0)} | 标签:{','.join(tags)}")
+        except Exception as e:
+            print(f"读取失败: {e}")
+    elif sub == "quality":
+        if not rest:
+            print("用法: ax collab quality <file1.py> [file2.py ...] [--all]")
+            return
+        r = subprocess.run([sys.executable, "code_quality_gate.py"] + rest, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60, cwd=PROJECT)
+        print(r.stdout.strip())
+    elif sub == "tasks":
+        r = subprocess.run([sys.executable, "sharedtask.py", "all"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30, cwd=PROJECT)
+        print(r.stdout.strip())
+    else:
+        print(f"未知子命令: {sub}")
+        print(cmd_collab.__doc__)
+
 COMMANDS = {
     "query": cmd_query, "part": cmd_part, "stock": cmd_stock,
     "customer": cmd_customer, "sales": cmd_sales,
@@ -524,7 +581,7 @@ COMMANDS = {
     "checktags": cmd_checktags, "opp": cmd_opp, "close": cmd_close,
     "setphone": cmd_setphone, "cardphone": cmd_cardphone,
     "transcribe": cmd_transcribe, "summarize-rec": cmd_summarize_rec,
-    "crossref": cmd_crossref, "clean": cmd_clean, "status": cmd_status, "task": cmd_task, "nophone": cmd_nophone, "oem": cmd_oem, "ds": cmd_ds, "agent": cmd_agent, "memory": cmd_memory,
+    "crossref": cmd_crossref, "clean": cmd_clean, "status": cmd_status, "task": cmd_task, "nophone": cmd_nophone, "oem": cmd_oem, "ds": cmd_ds, "agent": cmd_agent, "memory": cmd_memory, "collab": cmd_collab,
 }
 
 if __name__ == "__main__":
