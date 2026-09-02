@@ -187,8 +187,23 @@ def _bump_instance(instance_name, field="completed"):
         pass
 
 
+def _get_status(rid):
+    """读取任务当前状态，幂等性检查用"""
+    data = cli(["+record-get", "--base-token", BASE, "--table-id", TABLE,
+                "--record-id", rid, "--field-id", "状态", "--format", "json", "--as", "user"])
+    if data and data.get("ok"):
+        d = data.get("data", {})
+        rows, cols = d.get("data", []), d.get("fields", [])
+        if rows and cols:
+            return cell(rows[0][0]) if cols else ""
+    return ""
+
 def complete(rid, result, experience=""):
-    """完成任务并用免费AI提取结构化经验回收到共享记忆"""
+    """完成任务并用免费AI提取结构化经验回收到共享记忆（幂等：已完成/已失败则跳过）"""
+    cur = _get_status(rid)
+    if cur in ("已完成", "已失败"):
+        print(f"SKIP: 任务{rid}已是{cur}，不重复complete")
+        return
     set_status(rid, "已完成", result)
     data = cli(["+record-get", "--base-token", BASE, "--table-id", TABLE,
                 "--record-id", rid, "--format", "json", "--as", "user"])
@@ -510,7 +525,11 @@ def recommend(task_type=""):
 
 
 def fail(rid, reason, instance_name="云电脑"):
-    """任务失败上报：标记失败+记录原因+push踩坑经验到共享记忆"""
+    """任务失败上报：标记失败+记录原因+push踩坑经验到共享记忆（幂等：已完成/已失败则跳过）"""
+    cur = _get_status(rid)
+    if cur in ("已完成", "已失败"):
+        print(f"SKIP: 任务{rid}已是{cur}，不重复fail")
+        return
     # 读取任务信息
     data = cli(["+record-get", "--base-token", BASE, "--table-id", TABLE,
                 "--record-id", rid, "--format", "json", "--as", "user"])
