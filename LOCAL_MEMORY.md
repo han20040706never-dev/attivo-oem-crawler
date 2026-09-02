@@ -4,7 +4,6 @@
 > 格式：日期 + 要点，追加在最上面。
 
 ## 2026-09-02
-- **协作系统v3.1关键修复（晚间深度优化轮）**：①claim加指派人过滤（不能抢指派给其他实例的任务，之前价格监控抢了爬虫脚本的3个任务导致假完成）②daemon加update_heartbeat（实例每次巡检自动更新last_seen到instances.json并push GitHub，之前register只在部署时调一次导致心跳永远不更新）③check_heartbeat先pull GitHub最新instances.json再检查（之前读本地旧文件看不到云电脑心跳）④心跳唤醒机制（心跳超30分钟自动创建高优先级自检任务指派给对应实例，云电脑daemon的auto_selfcheck自动执行更新心跳，无需用户干预）⑤ai_router.py修os未import bug ⑥lark-cli +record-list用--filter-json不是--filter ⑦3个被假完成的爬虫任务已取消并重发
 - **业务数据洞察（已拉取分析，待用户指示再行动）**：200商机/40订单；75个商机提到90-300马力，38个停在New未跟进；福建成交率远高于浙江（Won27个里福建18个，浙江仅4个）；复购率仅19%（6/32）；8月订单26单（7月13单）；高价值未跟进：舟山海舸/漳州优艇汇/泉州王荣/厦门星海航/合肥大伟/宁德博浪船厂/霞浦阿胜/宿迁胡先生/福州长乐松下镇
 - **DeepSeek API（充钱）只用于代码**；dsh agent（免费）可用于业务分析
 - **协作系统v1.8**：check_done自动同步经验+查已失败、claim自动注册实例、complete/fail自动计数、任务优先级排序
@@ -180,22 +179,3 @@
 - 验收标准：'完成'不是'写完了'，是'验证过用户无法轻易挑出毛病'
 - 反向提问：发送前必须预判用户第一个追问并预置答案
 - 可执行性评分：用户能否不查资料仅凭此回答完成目标？<8分必须补步骤
-
-## 建线索铁律（2026.9.2纠正）
-- 一律走 ax.py newlead / crm_ops.cmd_newlead，禁止手写xmlrpc create
-- 必填：name=省份 城市 名字、type=lead、state_id、city(市级市)、country_id=中国、source_id(utm.source模型不是crm.tracking.source)、contact_name
-- 备注默认 <p><b>YYYY.M.D初次加上微信</b></p> 加粗
-- 用户没说来源绝不自己填；用户没说日期用当天
-- 建完必须回读验证 state/city/source/type/description 全部正确
-
-## 2026-09-03 协作系统深度优化轮（37项改进）
-- 心跳唤醒机制验证成功：云电脑爬虫脚本daemon停了8小时后，自检任务自动唤醒，auto_selfcheck执行，心跳恢复，complete任务。全链路无需人工干预。
-- pending_count=0根因：update_state用run([sharedtask.py,pending],timeout=20)，飞书API慢导致超时返回ERROR，不含'待处理'所以count=0。修复：改用cli()直接查询。
-- 自检任务重复创建根因：check_heartbeat用raw.githubusercontent.com拉instances.json超时，读到本地旧文件认为心跳仍超时。修复：用_fetch_github_file双通道拉取，创建前重新验证。
-- tags格式坑：instances.json里爬虫脚本的tags是字符串'爬虫,数据整理,配件查询'不是数组，导致标签匹配失败。修复：统一为数组。
-- auto_dispatch_pending验证成功：自动扫描无指派人任务，机密任务正确跳过（config相关），非机密任务自动指派给推荐实例。
-- health.py一键健康检查：输出daemon状态/实例心跳/任务统计/零件库进度/通知/代码版本，新对话不用逐个查。
-- daemon日志轮转：超1MB截断保留最近500行。
-- 经验质量评分：complete时AI提取经验后评分0-5，≤1分不push防垃圾经验污染共享记忆。
-- 负载感知：active_tasks追踪，推荐时负载高的实例降权。
-- 关键教训：subprocess调用外部脚本+短timeout=不可靠，能用cli()直接import就别用subprocess。
