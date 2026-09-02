@@ -297,6 +297,20 @@ def bootstrap():
             pass
     elif os.path.exists(guide_path):
         print("云电脑AI操作指南已存在: CLOUD_AI_GUIDE.md（启动时请先阅读）")
+    # 1.6 下载本地豆包记忆（LOCAL_MEMORY.md，含用户偏好/业务规范/纠正记录）
+    local_mem_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "LOCAL_MEMORY.md")
+    try:
+        lm_url = f"https://raw.githubusercontent.com/{GH_REPO}/main/LOCAL_MEMORY.md"
+        lm = requests.get(lm_url, timeout=10)
+        if lm.status_code == 200 and len(lm.text.strip()) > 50:
+            with open(local_mem_path, 'w', encoding='utf-8') as f:
+                f.write(lm.text)
+            print(f"\n--- 本地豆包记忆 LOCAL_MEMORY.md ({len(lm.text)}字，已同步到本地) ---")
+            print(lm.text[:2000])
+            if len(lm.text) > 2000:
+                print(f"...(共{len(lm.text)}字，已截断)")
+    except Exception:
+        pass
     # 2. 飞书增量拉取（只拉最近10条，新对话看最新就够）
     print("\n--- 飞书共享记忆最新10条 ---")
     pull(10)
