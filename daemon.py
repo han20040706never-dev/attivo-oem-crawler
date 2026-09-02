@@ -330,6 +330,14 @@ def _cycle():
                 continue
             if not should_auto_execute(title, typ):
                 log(f"  非OEM收尾任务，留给AI: {title}")
+                # 指派给本实例的非自动任务，写本地待办通知，云电脑AI可读
+                if not assignee or assignee == INSTANCE_NAME:
+                    try:
+                        pending_file = os.path.join(PROJECT, "_pending_ai_tasks.txt")
+                        with open(pending_file, 'a', encoding='utf-8') as f:
+                            f.write(f"[{datetime.datetime.now().strftime('%m-%d %H:%M')}] {rid} | {typ} | {title}\n")
+                    except OSError:
+                        pass
                 continue
             log(f"  自动认领: {title} ({rid})")
             claim_out = run(["sharedtask.py", "claim", rid, INSTANCE_NAME], timeout=30)
