@@ -3,6 +3,12 @@
 > 每次任务开始先读此文件。只记纠正、决策、偏好变更，不记临时过程。
 > 格式：日期 + 要点，追加在最上面。
 
+## 2026-09-03 02:05轮（7小时优化第3轮）
+- **修复crawl_brand.py兼容性**：crawl_oem_tree.py v2.0改造为OEMTreeCrawler类后，crawl_brand.py用`import crawl_oem_tree as C`访问模块级变量会坏。已修复：OEMTreeCrawler添加db_path/delay参数，crawl_brand.py v2.0用`with OEMTreeCrawler(db_path=..., delay=...) as c:`。两文件通过门禁已推送。
+- **云电脑状态**：价格监控超时95分钟、开发助手超时62分钟，两台daemon可能都停了（Linux容器nohup进程无保活）。自检任务已创建但无人处理，需用户手动重启云电脑daemon。爬虫脚本在线。
+- **重构任务进度**：3/4完成（爬虫基类/Odoo封装/工具import），任务4(Linux保活cron)因开发助手超时未执行。
+- **飞书API间歇性故障**：01:24-02:00多次LARK_ERR invalid_response，自动恢复，不影响核心功能。
+
 ## 2026-09-03 01:31轮（7小时优化第2轮）
 - **重构任务1完成**：crawler_base.py v1.0创建(统一HTTP重试/代理回退/限速/SQLite/断点续爬/进度打印/HTML解析)，crawl_oem_tree.py v2.0改造为继承基类(9.3KB→7.5KB)，通过code_quality_gate，已推送GitHub。
 - **重构任务2完成**：Odoo统一封装已存在(odoo包6模块)，15+脚本已统一使用，无需重复创建。
