@@ -1,10 +1,14 @@
 {
   "instances": {
     "云电脑": {
-      "tags": ["价格监控", "公开信息调研", "数据整理"],
+      "tags": [
+        "价格监控",
+        "公开信息调研",
+        "数据整理"
+      ],
       "completed": 0,
       "failed": 0,
-      "last_seen": "2026-09-02T12:00:00"
+      "last_seen": "2026-09-02T16:22:48.879974"
     }
   },
   "_comment": "云电脑实例注册表：instance_name -> {tags: [], completed: 0, failed: 0, last_seen: isoformat}"
