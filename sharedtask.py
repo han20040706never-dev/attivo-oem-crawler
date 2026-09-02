@@ -200,24 +200,39 @@ def complete(rid, result, experience=""):
 
 
 def claim(rid, instance_name):
-    """云电脑认领任务：标记处理中+对话日志声明身份+备注记录实例名"""
-    set_status(rid, "处理中")
-    chat(rid, f"我是【{instance_name}】，已认领此任务，开始执行", instance_name)
-    # 备注里记录认领者
+    """云电脑认领任务：先检查状态，已处理中则拒绝（防冲突锁）"""
+    # 先读当前状态
     data = cli(["+record-get", "--base-token", BASE, "--table-id", TABLE,
                 "--record-id", rid, "--format", "json", "--as", "user"])
+    current_status = ""
     remark = ""
     if data and data.get("ok"):
         d = data.get("data", {})
         rows, cols = d.get("data", []), d.get("fields", [])
         if rows and cols:
             fmap = {cols[j]: rows[0][j] for j in range(min(len(cols), len(rows[0])))}
+            current_status = cell(fmap.get("状态"))
             remark = cell(fmap.get("备注"))
+    # 锁检查：已处理中则拒绝
+    if current_status == "处理中":
+        existing_claimant = ""
+        for line in remark.split("\n"):
+            if "认领者:" in line:
+                existing_claimant = line.split("认领者:")[-1].strip()
+        print(f"FAIL: 任务{rid}已被【{existing_claimant}】认领，请勿重复认领")
+        return False
+    if current_status not in ("待处理",):
+        print(f"FAIL: 任务{rid}状态为{current_status}，只能认领待处理任务")
+        return False
+    # 认领
+    set_status(rid, "处理中")
+    chat(rid, f"我是【{instance_name}】，已认领此任务，开始执行", instance_name)
     new_remark = f"{remark}\n认领者: {instance_name}".strip()
     cli(["+record-batch-update", "--base-token", BASE, "--table-id", TABLE,
          "--json", json.dumps({"update_records": {rid: {"备注": new_remark}}}, ensure_ascii=False),
          "--as", "user"])
     print(f"OK: 【{instance_name}】已认领任务 {rid}")
+    return True
 
 
 def rate(rid, score, feedback=""):
@@ -282,6 +297,45 @@ def use_template(tpl_name, params_str="", assignee=""):
         title = title.replace("{" + k + "}", v)
         content = content.replace("{" + k + "}", v)
     push(tpl["type"], title, content, remark, assignee)
+
+
+def dashboard():
+    """任务仪表盘：按状态统计+最近活动"""
+    data = cli(["+record-list", "--base-token", BASE, "--table-id", TABLE,
+                "--limit", "100", "--format", "json", "--as", "user"])
+    if not data or not data.get("ok"):
+        print("dashboard: 查询失败"); return
+    recs = parse_matrix(data)
+    stats = {"待处理": [], "处理中": [], "已完成": [], "已取消": []}
+    for rid, f in recs:
+        st = cell(f.get("状态"))
+        title = cell(f.get("任务标题"))
+        tp = cell(f.get("任务类型"))
+        assignee = cell(f.get("指派给"))
+        remark = cell(f.get("备注"))
+        claimer = ""
+        for line in remark.split("\n"):
+            if "认领者:" in line:
+                claimer = line.split("认领者:")[-1].strip()
+        entry = f"[{rid}] {title} ({tp})"
+        if claimer: entry += f" 认领:{claimer}"
+        if assignee: entry += f" 指派:{assignee}"
+        if st in stats:
+            stats[st].append(entry)
+        else:
+            stats.setdefault(st, []).append(entry)
+    print("=" * 50)
+    print("任务仪表盘")
+    print("=" * 50)
+    for st, items in stats.items():
+        if items:
+            print(f"\n【{st}】{len(items)}个")
+            for item in items[:5]:
+                print(f"  {item}")
+            if len(items) > 5:
+                print(f"  ...还有{len(items)-5}个")
+    total = sum(len(v) for v in stats.values())
+    print(f"\n总计: {total}个任务")
 
 
 def watchdog(hours=24):
@@ -353,6 +407,8 @@ def main():
         claim(a.rest[0], a.rest[1])
     elif a.action == "watchdog":
         watchdog(int(a.rest[0]) if a.rest else 24)
+    elif a.action == "dashboard":
+        dashboard()
     elif a.action == "templates":
         list_templates()
     elif a.action == "template":
