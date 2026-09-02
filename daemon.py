@@ -1,14 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-协作系统自动巡检daemon（v2.0 智能自动版）
-功能：
-  1. 自动认领匹配本机标签的待处理任务（无需人工触发）
-  2. 自动执行标准化任务（爬虫/数据整理等）
-  3. 回收已完成任务+同步经验
-  4. 重置超时任务
-用法：
-  python daemon.py --instance "云电脑 爬虫脚本" --tags "爬虫,数据整理,配件查询" --interval 300
-  python daemon.py --once  # 只跑一次
+协作系统自动巡检daemon v2.3（DeepSeek审查后修复版）
+修复：
+  - get_pending_tasks正则适配6字段输出
+  - auto_update md5比较前统一换行符（Windows CRLF vs GitHub LF）
+  - 标签关键词匹配与auto_dispatch一致
 """
 import sys, io, os, time, subprocess, json, datetime, argparse, re, hashlib, py_compile, tempfile
 sys.stdout = io.TextIOWrapper(sys.stdout.detach(), encoding='utf-8')
@@ -18,48 +14,18 @@ LOG_FILE = os.path.join(PROJECT, "_daemon.log")
 INSTANCE_NAME = os.environ.get("DAEMON_INSTANCE", "")
 INSTANCE_TAGS = os.environ.get("DAEMON_TAGS", "")
 GITHUB_RAW = "https://raw.githubusercontent.com/han20040706never-dev/attivo-oem-crawler/main/"
-AUTO_UPDATE_FILES = ["daemon.py", "sharedtask.py", "shared_mem.py", "check_done.py", "common.py", "install_daemon_task.py"]
+AUTO_UPDATE_FILES = ["daemon.py", "sharedtask.py", "shared_mem.py", "check_done.py", "common.py", "install_daemon_task.py", "auto_dispatch.py"]
 
-def auto_update():
-    """启动时自动检查GitHub更新，有新代码自动下载替换（语法验证通过才生效）"""
-    try:
-        import requests
-        updated = []
-        for fname in AUTO_UPDATE_FILES:
-            local_path = os.path.join(PROJECT, fname)
-            if not os.path.exists(local_path):
-                continue
-            # 下载GitHub最新版
-            r = requests.get(GITHUB_RAW + fname, timeout=15)
-            if r.status_code != 200:
-                continue
-            remote_content = r.text
-            # 比较哈希
-            local_hash = hashlib.md5(open(local_path, 'rb').read()).hexdigest()
-            remote_hash = hashlib.md5(remote_content.encode('utf-8')).hexdigest()
-            if local_hash == remote_hash:
-                continue
-            # 语法验证
-            tmp_path = os.path.join(tempfile.gettempdir(), f"_update_{fname}")
-            with open(tmp_path, 'w', encoding='utf-8') as f:
-                f.write(remote_content)
-            try:
-                py_compile.compile(tmp_path, doraise=True)
-            except py_compile.PyCompileError:
-                log(f"  自动更新跳过 {fname}：语法验证失败")
-                os.remove(tmp_path)
-                continue
-            # 替换本地文件
-            with open(local_path, 'w', encoding='utf-8') as f:
-                f.write(remote_content)
-            os.remove(tmp_path)
-            updated.append(fname)
-        if updated:
-            log(f"  自动更新: {', '.join(updated)}")
-        return updated
-    except Exception as e:
-        log(f"  自动更新检查失败: {e}")
-        return []
+TAG_KEYWORDS = {
+    "爬虫": ["爬", "爬虫", "crawl", "抓取", "采集", "scrape"],
+    "价格监控": ["价格", "监控", "比价", "行情", "多少钱", "售价"],
+    "公开信息调研": ["调研", "搜索", "查一下", "公开信息", "供应商", "资讯"],
+    "数据整理": ["整理", "统计", "分析", "报表", "数据清洗", "清洗"],
+    "配件查询": ["配件", "查询", "零件", "型号", "兼容", "替代"],
+    "内容生产": ["文案", "朋友圈", "海报", "脚本", "教程", "FAQ", "话术"],
+    "文件处理": ["转换", "压缩", "重命名", "水印", "转码", "批量"],
+    "代码开发": ["代码", "脚本", "工具", "开发", "debug", "修复"],
+}
 
 def log(msg):
     ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -76,78 +42,117 @@ def run(cmd_args, timeout=120):
     except Exception as e:
         return f"ERROR: {e}"
 
-def get_pending_tasks():
-    """获取待处理任务列表，返回[(rid, title, typ, content)]"""
-    out = run(["sharedtask.py", "pending"], timeout=30)
-    tasks = []
-    for line in out.split("\n"):
-        m = re.match(r'\[(rec\w+)\]\s+\S+\s+\|\s+(\S+)\s+\|\s+\S+\s+\|\s+(\S+)\s+\|\s+(.*)', line)
-        if m:
-            tasks.append((m.group(1), m.group(4).strip(), m.group(3), ""))
-    return tasks
+def _norm(content_bytes):
+    """统一换行符为LF，避免Windows CRLF导致md5永远不一致"""
+    return content_bytes.replace(b'\r\n', b'\n').replace(b'\r', b'\n')
+
+def auto_update():
+    try:
+        import requests
+        updated = []
+        for fname in AUTO_UPDATE_FILES:
+            local_path = os.path.join(PROJECT, fname)
+            if not os.path.exists(local_path):
+                continue
+            r = requests.get(GITHUB_RAW + fname, timeout=8)
+            if r.status_code != 200:
+                continue
+            remote_bytes = r.content
+            local_bytes = open(local_path, 'rb').read()
+            if _norm(local_bytes) == _norm(remote_bytes):
+                continue
+            tmp_path = os.path.join(tempfile.gettempdir(), f"_update_{fname}")
+            with open(tmp_path, 'wb') as f:
+                f.write(remote_bytes)
+            try:
+                py_compile.compile(tmp_path, doraise=True)
+            except py_compile.PyCompileError:
+                log(f"  自动更新跳过 {fname}：语法验证失败")
+                if os.path.exists(tmp_path):
+                    os.remove(tmp_path)
+                continue
+            with open(local_path, 'wb') as f:
+                f.write(remote_bytes)
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+            updated.append(fname)
+        if updated:
+            log(f"  自动更新: {', '.join(updated)}")
+        return updated
+    except Exception as e:
+        log(f"  自动更新检查失败: {e}")
+        return []
 
 def load_instance_stats():
-    """加载instances.json获取各实例历史完成率"""
     try:
         with open(os.path.join(PROJECT, "instances.json"), 'r', encoding='utf-8') as f:
-            data = json.load(f)
-        return data.get("instances", {})
+            return json.load(f).get("instances", {})
     except:
         return {}
 
 def task_matches_tags(task_type, title, tags):
-    """判断任务是否匹配本机标签（带历史完成率加权）"""
     if not tags:
         return True
     tag_list = [t.strip() for t in tags.split(",") if t.strip()]
-    text = f"{task_type} {title}"
+    text = f"{task_type} {title}".lower()
     score = 0
     for tag in tag_list:
-        if tag in text or tag in task_type:
+        if tag.lower() in text:
             score += 10
-    # 历史完成率加成
+            continue
+        for kw in TAG_KEYWORDS.get(tag, []):
+            if kw.lower() in text:
+                score += 10
+                break
     stats = load_instance_stats()
     inst = stats.get(INSTANCE_NAME, {})
     completed = inst.get("completed", 0)
     failed = inst.get("failed", 0)
     if completed + failed > 0:
-        rate = completed / (completed + failed)
-        score += int(rate * 5)
+        score += int(completed / (completed + failed) * 5)
     return score >= 10
 
+def get_pending_tasks():
+    out = run(["sharedtask.py", "pending"], timeout=30)
+    tasks = []
+    # 格式: [rid] 优先级 | 任务号 | 状态 | 来源 | 类型 | 标题 → 指派人
+    for line in out.split("\n"):
+        m = re.match(r'\[(rec\w+)\]\s+\S+\s+\|\s+\S+\s+\|\s+\S+\s+\|\s+\S+\s+\|\s+(\S+)\s+\|\s+(.*)', line)
+        if m:
+            rid = m.group(1)
+            typ = m.group(2)
+            title = m.group(3).split(" \u2192 ")[0].strip()
+            tasks.append((rid, title, typ, ""))
+    return tasks
+
 def auto_execute_crawl(rid, title, content):
-    """自动执行爬虫任务"""
     log(f"  自动执行爬虫任务: {title}")
-    # 下载剩余section列表
     try:
         import requests
-        url = "https://raw.githubusercontent.com/han20040706never-dev/attivo-oem-crawler/main/_remaining_sections.json"
+        url = GITHUB_RAW + "_remaining_sections.json"
         r = requests.get(url, timeout=30)
-        if r.status_code == 200:
-            sections = r.json()
-            log(f"  下载到{len(sections)}个section")
-            # 写一个临时爬虫脚本抓这些section
-            script = os.path.join(PROJECT, "_auto_crawl_remaining.py")
-            with open(script, 'w', encoding='utf-8') as f:
-                f.write('''# -*- coding: utf-8 -*-
+        if r.status_code != 200:
+            return f"爬虫失败：无法下载section列表({r.status_code})"
+        sections = r.json()
+        with open("_remaining_sections.json", 'w', encoding='utf-8') as f:
+            json.dump(sections, f, ensure_ascii=False)
+        script = os.path.join(PROJECT, "_auto_crawl.py")
+        with open(script, 'w', encoding='utf-8') as f:
+            f.write('''# -*- coding: utf-8 -*-
 import sys, io, json, requests, sqlite3, time, re
 sys.stdout = io.TextIOWrapper(sys.stdout.detach(), encoding='utf-8')
-sys.path.insert(0, '.')
-PROJECT = '.'
 with open('_remaining_sections.json','r',encoding='utf-8') as f:
     sections = json.load(f)
 conn = sqlite3.connect('oemkb.db')
 c = conn.cursor()
-headers = {'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+headers = {'User-Agent':'Mozilla/5.0'}
 ok = 0
 for i, sec in enumerate(sections):
     try:
         url = sec['url']
         r = requests.get(url, headers=headers, timeout=30)
         if r.status_code != 200:
-            print(f"[{i+1}/{len(sections)}] FAIL {r.status_code} {sec['name']}")
             continue
-        # 解析零件行
         parts = re.findall(r'class="part"[^>]*>.*?<td class="num"[^>]*>(.*?)</td>.*?<td class="name"[^>]*>(.*?)</td>', r.text, re.S)
         for item, pno, desc in parts:
             c.execute("INSERT OR IGNORE INTO part (sec_url, item, part_no, desc, qty) VALUES (?,?,?,?,?)",
@@ -155,94 +160,73 @@ for i, sec in enumerate(sections):
         c.execute("UPDATE section SET part_done=1 WHERE url=?", (url,))
         conn.commit()
         ok += 1
-        print(f"[{i+1}/{len(sections)}] OK {sec['name']} ({len(parts)} parts)")
         time.sleep(0.5)
-    except Exception as e:
-        print(f"[{i+1}/{len(sections)}] ERROR {e}")
+    except:
+        pass
 conn.close()
-print(f"DONE: {ok}/{len(sections)} sections crawled")
+print(f"DONE: {ok}/{len(sections)}")
 ''')
-            result = run([script], timeout=600)
-            log(f"  爬虫结果: {result[-300:]}")
-            # 清理临时脚本
-            if os.path.exists(script):
-                os.remove(script)
-            return f"自动爬取完成: {result[-200:]}"
+        result = run([script], timeout=600)
+        if os.path.exists(script):
+            os.remove(script)
+        if os.path.exists("_remaining_sections.json"):
+            os.remove("_remaining_sections.json")
+        return f"自动爬取完成: {result[-200:]}"
     except Exception as e:
         return f"自动爬取失败: {e}"
 
 def try_auto_execute(rid, title, task_type, content):
-    """尝试自动执行任务，成功返回结果字符串，失败返回None"""
     if "爬虫" in title or "crawl" in title.lower() or "爬" in title:
         return auto_execute_crawl(rid, title, content)
-    # 其他类型暂不自动执行，留给AI处理
     return None
 
 def cycle():
     log("=== 巡检开始 ===")
-    
-    # 0. 双向同步经验（pull新经验 + push本地新经验）
     sync_out = run(["shared_mem.py", "sync"], timeout=60)
-    log(f"经验同步: {sync_out[:150]}")
-    
-    # 1. 自动认领匹配标签的任务
+    log(f"经验同步: {sync_out[:120]}")
     if INSTANCE_NAME:
         tasks = get_pending_tasks()
         for rid, title, typ, content in tasks:
             if task_matches_tags(typ, title, INSTANCE_TAGS):
-                log(f"  自动认领任务: {title} ({rid})")
+                log(f"  自动认领: {title} ({rid})")
                 claim_out = run(["sharedtask.py", "claim", rid, INSTANCE_NAME], timeout=30)
                 if "OK" in claim_out:
-                    # 尝试自动执行
                     result = try_auto_execute(rid, title, typ, content)
                     if result:
                         run(["sharedtask.py", "complete", rid, result], timeout=60)
-                        log(f"  任务自动完成: {title}")
+                        log(f"  自动完成: {title}")
                     else:
-                        log(f"  任务需AI处理: {title}")
+                        log(f"  需AI处理: {title}")
                 else:
-                    log(f"  认领失败: {claim_out[:100]}")
-    
-    # 2. check_done（回收任务+自动同步经验）
+                    log(f"  认领失败: {claim_out[:80]}")
     out = run(["check_done.py"], timeout=60)
-    log(f"check_done: {out[:200]}")
-    
-    # 3. watchdog（重置超时任务）
+    log(f"check_done: {out[:150]}")
     out2 = run(["sharedtask.py", "watchdog", "--auto"], timeout=30)
-    log(f"watchdog: {out2[:100]}")
-    
+    log(f"watchdog: {out2[:80]}")
     log("=== 巡检结束 ===\n")
 
 def main():
     global INSTANCE_NAME, INSTANCE_TAGS
     p = argparse.ArgumentParser()
-    p.add_argument("--instance", type=str, default="", help="本机实例名称")
-    p.add_argument("--tags", type=str, default="", help="本机专长标签，逗号分隔")
-    p.add_argument("--interval", type=int, default=300, help="巡检间隔秒数，默认300")
-    p.add_argument("--once", action="store_true", help="只跑一次")
+    p.add_argument("--instance", type=str, default="")
+    p.add_argument("--tags", type=str, default="")
+    p.add_argument("--interval", type=int, default=300)
+    p.add_argument("--once", action="store_true")
     a = p.parse_args()
-    
     if a.instance:
         INSTANCE_NAME = a.instance
     if a.tags:
         INSTANCE_TAGS = a.tags
-    
     if INSTANCE_NAME:
-        log(f"daemon启动，实例={INSTANCE_NAME}, 标签={INSTANCE_TAGS}, 间隔{a.interval}秒")
+        log(f"daemon启动，实例={INSTANCE_NAME}, 标签={INSTANCE_TAGS}")
     else:
-        log(f"daemon启动（仅回收模式，不自动认领）, 间隔{a.interval}秒")
-    
-    # 自动更新：检查GitHub最新代码，有更新自动替换（语法验证通过才生效）
+        log("daemon启动（仅回收模式）")
     auto_update()
-    
-    # 启动时自动bootstrap：拉取所有历史经验（教学相长）
     boot_out = run(["shared_mem.py", "bootstrap"], timeout=120)
-    log(f"启动经验同步: {boot_out[:200]}")
-    
+    log(f"启动经验同步: {boot_out[:150]}")
     if a.once:
         cycle()
         return
-    
     while True:
         try:
             cycle()
