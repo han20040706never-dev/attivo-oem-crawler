@@ -267,6 +267,20 @@ def bootstrap():
                 f.write(content)
     except Exception as e:
         print(f"GitHub拉取失败: {e}")
+    # 1.5 下载云电脑AI操作指南（如不存在）
+    guide_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "CLOUD_AI_GUIDE.md")
+    if not os.path.exists(guide_path):
+        try:
+            guide_url = f"https://raw.githubusercontent.com/{GH_REPO}/main/CLOUD_AI_GUIDE.md"
+            gr = requests.get(guide_url, timeout=10)
+            if gr.status_code == 200:
+                with open(guide_path, 'w', encoding='utf-8') as f:
+                    f.write(gr.text)
+                print(f"已下载云电脑AI操作指南: CLOUD_AI_GUIDE.md（{len(gr.text)}字），启动时请先阅读")
+        except Exception:
+            pass
+    elif os.path.exists(guide_path):
+        print("云电脑AI操作指南已存在: CLOUD_AI_GUIDE.md（启动时请先阅读）")
     # 2. 飞书增量拉取（只拉最近10条，新对话看最新就够）
     print("\n--- 飞书共享记忆最新10条 ---")
     pull(10)
