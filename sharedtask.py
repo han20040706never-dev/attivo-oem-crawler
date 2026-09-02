@@ -220,6 +220,70 @@ def claim(rid, instance_name):
     print(f"OK: 【{instance_name}】已认领任务 {rid}")
 
 
+def rate(rid, score, feedback=""):
+    """给完成的任务评分1-5，<=2分自动创建改进任务"""
+    score = int(score)
+    if score < 1 or score > 5:
+        print("评分必须1-5"); return
+    # 读取任务信息
+    data = cli(["+record-get", "--base-token", BASE, "--table-id", TABLE,
+                "--record-id", rid, "--format", "json", "--as", "user"])
+    title = ""
+    if data and data.get("ok"):
+        d = data.get("data", {})
+        rows, cols = d.get("data", []), d.get("fields", [])
+        if rows and cols:
+            fmap = {cols[j]: rows[0][j] for j in range(min(len(cols), len(rows[0])))}
+            title = cell(fmap.get("任务标题"))
+    # 追加评分到对话日志
+    chat(rid, f"【本地豆包评分】{score}/5 {'⭐'*score} {feedback}", "本地豆包")
+    print(f"已评分: {rid} {score}/5")
+    if score <= 2:
+        # 自动创建改进任务
+        push("代码开发", f"改进:{title}",
+             f"原任务结果质量不佳（评分{score}/5）。反馈：{feedback}\n请重新执行或改进方法，参考原任务对话日志。",
+             f"原任务:{rid}", "")
+        print("低分自动创建改进任务")
+
+
+def list_templates():
+    """列出可用任务模板"""
+    import os
+    tpl_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "task_templates.json")
+    if not os.path.exists(tpl_file):
+        print("无模板文件"); return
+    with open(tpl_file, 'r', encoding='utf-8') as f:
+        tpls = json.load(f)
+    print("=== 可用任务模板 ===")
+    for name, tpl in tpls.items():
+        print(f"  {name}: {tpl['title'][:50]}")
+
+def use_template(tpl_name, params_str="", assignee=""):
+    """用模板创建任务: use_template <模板名> <参数key=value,...> [指派给]"""
+    import os
+    tpl_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "task_templates.json")
+    if not os.path.exists(tpl_file):
+        print("无模板文件"); return
+    with open(tpl_file, 'r', encoding='utf-8') as f:
+        tpls = json.load(f)
+    if tpl_name not in tpls:
+        print(f"模板'{tpl_name}'不存在，可用:", "/".join(tpls.keys())); return
+    tpl = tpls[tpl_name]
+    # 解析参数
+    params = {}
+    for kv in params_str.split(","):
+        if "=" in kv:
+            k, v = kv.split("=", 1)
+            params[k.strip()] = v.strip()
+    title = tpl["title"]
+    content = tpl["content"]
+    remark = tpl.get("remark", "")
+    for k, v in params.items():
+        title = title.replace("{" + k + "}", v)
+        content = content.replace("{" + k + "}", v)
+    push(tpl["type"], title, content, remark, assignee)
+
+
 def watchdog(hours=24):
     """检测超时任务：处理中超过N小时未完成的，列出并提示重置"""
     import datetime
@@ -289,6 +353,15 @@ def main():
         claim(a.rest[0], a.rest[1])
     elif a.action == "watchdog":
         watchdog(int(a.rest[0]) if a.rest else 24)
+    elif a.action == "templates":
+        list_templates()
+    elif a.action == "template":
+        # template <模板名> [key=value,...] [指派给]
+        use_template(a.rest[0], a.rest[1] if len(a.rest) > 1 else "",
+                     a.rest[2] if len(a.rest) > 2 else "")
+    elif a.action == "rate":
+        # rate <record_id> <1-5> [反馈]
+        rate(a.rest[0], a.rest[1], " ".join(a.rest[2:]) if len(a.rest) > 2 else "")
     else:
         print(__doc__)
 
