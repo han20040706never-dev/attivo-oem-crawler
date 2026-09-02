@@ -152,12 +152,13 @@ def view(rid):
 
 
 def complete(rid, result, experience=""):
-    """完成任务并自动回收经验到共享记忆"""
+    """完成任务并用免费AI提取结构化经验回收到共享记忆"""
     set_status(rid, "已完成", result)
     data = cli(["+record-get", "--base-token", BASE, "--table-id", TABLE,
                 "--record-id", rid, "--format", "json", "--as", "user"])
     title = ""
     chat_log = ""
+    task_content = ""
     if data and data.get("ok"):
         d = data.get("data", {})
         rows, cols = d.get("data", []), d.get("fields", [])
@@ -165,19 +166,29 @@ def complete(rid, result, experience=""):
             fmap = {cols[j]: rows[0][j] for j in range(min(len(cols), len(rows[0])))}
             title = cell(fmap.get("任务标题"))
             chat_log = cell(fmap.get("对话日志"))
-    exp = result[:300]
+            task_content = cell(fmap.get("任务内容"))
+    # 用免费AI提取结构化经验
+    exp_text = result
     if experience:
-        exp += f"\n经验: {experience}"
+        exp_text += f"\n\n手动补充经验: {experience}"
     if chat_log:
-        lines = [l for l in chat_log.split("\n") if l.strip()]
-        if len(lines) > 3:
-            exp += "\n关键对话:\n" + "\n".join(lines[-3:])
+        exp_text += f"\n\n对话日志:\n{chat_log}"
+    structured = ""
+    try:
+        from ai_router import extract
+        structured = extract(exp_text, ["可复用经验", "踩坑教训", "可复用代码或脚本名", "产出数据文件路径"], provider=None)
+        if structured:
+            structured = str(structured)
+    except Exception as e:
+        print(f"AI经验提取失败({e})，用原始结果")
+        structured = result[:500]
+    final_exp = f"任务: {task_content[:100]}\n结果: {result[:300]}\n\n=== AI提取经验 ===\n{structured[:800]}"
     try:
         import subprocess
         subprocess.run([sys.executable, "shared_mem.py", "push",
-                        f"[任务完成] {title}", "已完成任务", exp, "脚本"],
-                       capture_output=True, text=True, timeout=30, encoding="utf-8")
-        print("经验已回收到共享记忆")
+                        f"[任务完成] {title}", "已完成任务", final_exp, "脚本"],
+                       capture_output=True, text=True, timeout=60, encoding="utf-8")
+        print("经验已AI提取并回收到共享记忆")
     except Exception as e:
         print(f"经验回收失败: {e}")
 
