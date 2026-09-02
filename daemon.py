@@ -438,6 +438,7 @@ def _cycle():
     update_heartbeat()
     check_heartbeat()
     check_stale_tasks()
+    check_token_usage()
     update_state()
     log("=== 巡检结束 ===")
 
@@ -713,6 +714,50 @@ def check_stale_tasks():
                 json.dump(notifs[-20:], f, ensure_ascii=False, indent=2)
     except Exception as e:
         log(f"任务老化检查失败: {e}")
+
+
+def check_token_usage():
+    """检查DeepSeek API当天用量，超阈值写告警（DeepSeek充50元，代码专用）"""
+    try:
+        import datetime
+        token_log = os.path.join(PROJECT, "_token_usage.jsonl")
+        if not os.path.exists(token_log):
+            return
+        today = datetime.date.today().isoformat()
+        ds_input, ds_output, ds_calls = 0, 0, 0
+        with open(token_log, 'r', encoding='utf-8') as f:
+            for line in f:
+                try:
+                    rec = json.loads(line.strip())
+                    if rec.get("date") == today and "deepseek" in rec.get("model", "").lower():
+                        ds_input += rec.get("prompt_tokens", 0)
+                        ds_output += rec.get("completion_tokens", 0)
+                        ds_calls += 1
+                except:
+                    continue
+        if ds_calls == 0:
+            return
+        # DeepSeek价格: 输入1元/百万, 输出2元/百万
+        cost = ds_input / 1e6 * 1.0 + ds_output / 1e6 * 2.0
+        # 每天阈值3元（约占50元总额的6%），超了告警
+        if cost > 3.0:
+            notif_file = os.path.join(PROJECT, "_notifications.json")
+            notifs = []
+            if os.path.exists(notif_file):
+                try:
+                    notifs = json.load(open(notif_file, 'r', encoding='utf-8'))
+                except:
+                    notifs = []
+            # 去重：同一天只告警一次
+            today_key = f"token_alert_{today}"
+            if not any(n.get("type") == today_key for n in notifs):
+                notifs.append({"time": datetime.datetime.now().isoformat(), "type": today_key,
+                               "msg": f"DeepSeek API今日用量告警: {ds_calls}次调用, 输入{ds_input}token, 输出{ds_output}token, 约{cost:.2f}元。阈值3元/天，建议减少代码调用或切免费API。"})
+                with open(notif_file, 'w', encoding='utf-8') as f:
+                    json.dump(notifs[-20:], f, ensure_ascii=False, indent=2)
+                log(f"Token用量告警: {cost:.2f}元/{ds_calls}次")
+    except Exception as e:
+        log(f"Token用量检查失败: {e}")
 
 
 def update_state():
