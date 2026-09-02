@@ -368,6 +368,7 @@ def _cycle():
     out2 = run(["sharedtask.py", "watchdog", "--auto"], timeout=30)
     log(f"watchdog: {out2[:100]}")
     sync_memory()
+    update_heartbeat()
     check_heartbeat()
     update_state()
     log("=== 巡检结束 ===")
@@ -387,6 +388,50 @@ def sync_memory():
         log(f"共享记忆同步: {out[:100]}")
     except Exception as e:
         log(f"共享记忆同步失败: {e}")
+
+
+def update_heartbeat():
+    """每次巡检更新本实例的last_seen到instances.json并push到GitHub（pull-merge-push防冲突）"""
+    if not INSTANCE_NAME:
+        return
+    try:
+        import datetime, requests
+        reg_file = os.path.join(PROJECT, "instances.json")
+        # pull最新
+        try:
+            r = requests.get(GITHUB_RAW + "instances.json", timeout=15)
+            if r.status_code == 200:
+                remote = r.json()
+                with open(reg_file, 'w', encoding='utf-8') as f:
+                    json.dump(remote, f, ensure_ascii=False, indent=2)
+        except:
+            pass
+        # merge更新
+        with open(reg_file, 'r', encoding='utf-8') as f:
+            reg = json.load(f)
+        instances = reg.setdefault("instances", {})
+        inst = instances.setdefault(INSTANCE_NAME, {"tags": INSTANCE_TAGS or [], "completed": 0, "failed": 0})
+        inst["last_seen"] = datetime.datetime.now().isoformat()
+        inst["tags"] = INSTANCE_TAGS or inst.get("tags", [])
+        with open(reg_file, 'w', encoding='utf-8') as f:
+            json.dump(reg, f, ensure_ascii=False, indent=2)
+        # push到GitHub
+        try:
+            import base64
+            sys.path.insert(0, PROJECT)
+            import config
+            H = {'Authorization': f'token {config.GITHUB_PAT}', 'Accept': 'application/vnd.github.v3+json'}
+            REPO = 'han20040706never-dev/attivo-oem-crawler'
+            content = open(reg_file, 'rb').read()
+            r2 = requests.get(f'https://api.github.com/repos/{REPO}/contents/instances.json', headers=H, timeout=15)
+            sha = r2.json().get('sha') if r2.status_code == 200 else None
+            p = {'message': f'heartbeat: {INSTANCE_NAME}', 'content': base64.b64encode(content).decode()}
+            if sha: p['sha'] = sha
+            requests.put(f'https://api.github.com/repos/{REPO}/contents/instances.json', headers=H, json=p, timeout=15)
+        except Exception as e:
+            log(f"  心跳push失败: {e}")
+    except Exception as e:
+        log(f"心跳更新失败: {e}")
 
 
 def check_heartbeat():
