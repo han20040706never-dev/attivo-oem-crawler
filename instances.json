@@ -1,16 +1,20 @@
 {
   "instances": {
     "云电脑 价格监控": {
-      "tags": ["价格监控", "公开信息调研", "数据整理"],
+      "tags": [
+        "价格监控",
+        "公开信息调研",
+        "数据整理"
+      ],
       "completed": 0,
       "failed": 0,
       "last_seen": "2026-09-02T16:25:00"
     },
     "云电脑 爬虫脚本": {
-      "tags": ["爬虫", "数据整理", "配件查询"],
+      "tags": "爬虫,数据整理,配件查询",
       "completed": 0,
       "failed": 0,
-      "last_seen": "2026-09-02T16:30:00"
+      "last_seen": "2026-09-02T23:02:42.308279"
     }
   },
   "_comment": "云电脑实例注册表：instance_name -> {tags: [], completed: 0, failed: 0, last_seen: isoformat}"
