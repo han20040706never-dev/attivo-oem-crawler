@@ -511,6 +511,11 @@ def sync_local_memory():
         log(f"本地记忆同步异常: {e}")
 
 
+class _SkipSelfCheck(Exception):
+    """内部异常：跳过自检任务创建（已有待处理任务）"""
+    pass
+
+
 def check_heartbeat():
     """检查云电脑实例心跳，先从GitHub拉最新instances.json，last_seen超过30分钟告警"""
     try:
@@ -576,6 +581,25 @@ def check_heartbeat():
                     last_time = last_sc.get(inst_name, 0)
                     if time.time() - last_time < 1800:  # 30分钟内不重复创建
                         continue
+                    # 增强去重：查询飞书表中是否已有该实例的待处理自检任务
+                    try:
+                        from sharedtask import cli, BASE, TABLE, cell as _cell
+                        _existing = cli(["+record-list", "--base-token", BASE, "--table-id", TABLE,
+                                         "--filter-json", json.dumps({"logic": "and", "conditions": [
+                                             ["状态", "==", "待处理"], ["指派给", "==", inst_name]]}, ensure_ascii=False),
+                                         "--limit", "20", "--format", "json", "--as", "user"])
+                        if _existing and _existing.get("ok"):
+                            _d = _existing.get("data", {})
+                            _rows, _cols = _d.get("data", []), _d.get("fields", [])
+                            for _row in _rows:
+                                _fm = {_cols[j]: _row[j] for j in range(min(len(_cols), len(_row)))}
+                                if "自检" in _cell(_fm.get("任务标题")):
+                                    log(f"  {inst_name}已有待处理自检任务，跳过重复创建")
+                                    raise _SkipSelfCheck()
+                    except _SkipSelfCheck:
+                        continue
+                    except Exception as _e:
+                        log(f"  自检任务去重查询异常({_e})，继续创建")
                     rid = push("其他", f"{inst_name}自检+心跳更新",
                                f"云电脑实例【{inst_name}】心跳超时。请执行：\n"
                                f"1. cd C:\\attivo-collab\n"
