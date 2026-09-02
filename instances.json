@@ -11,16 +11,26 @@
       "last_seen": "2026-09-02T16:25:00"
     },
     "云电脑 爬虫脚本": {
-      "tags": "爬虫,数据整理,配件查询",
+      "tags": [
+        "爬虫",
+        "数据整理",
+        "配件查询"
+      ],
       "completed": 0,
       "failed": 0,
-      "last_seen": "2026-09-03T00:31:38.333670"
+      "last_seen": "2026-09-03T00:36:56.567586"
     },
     "开发助手": {
-      "tags": "代码开发,重构,bug修复,脚本优化",
+      "tags": [
+        "代码开发",
+        "重构",
+        "bug修复",
+        "脚本优化"
+      ],
       "completed": 0,
       "failed": 0,
-      "last_seen": "2026-09-03T00:45:17.306306"
+      "active_tasks": 0,
+      "last_seen": ""
     }
   },
   "_comment": "云电脑实例注册表：instance_name -> {tags: [], completed: 0, failed: 0, last_seen: isoformat}"
