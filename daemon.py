@@ -847,10 +847,17 @@ def update_state():
     try:
         import datetime
         state = {"last_update": datetime.datetime.now().isoformat()}
-        # 任务统计
+        # 任务统计（用cli直接查询，避免subprocess超时导致pending=0）
         try:
-            pending_out = run(["sharedtask.py", "pending"], timeout=20)
-            state["pending_count"] = pending_out.count("待处理") if "待处理" in pending_out else 0
+            sys.path.insert(0, PROJECT)
+            from sharedtask import cli, BASE, TABLE
+            pdata = cli(["+record-list", "--base-token", BASE, "--table-id", TABLE,
+                         "--filter-json", '{"logic":"and","conditions":[["状态","==","待处理"]]}',
+                         "--limit", "100", "--format", "json", "--as", "user"])
+            if pdata and pdata.get("ok"):
+                state["pending_count"] = len(pdata.get("data", {}).get("data", []))
+            else:
+                state["pending_count"] = -1
         except:
             state["pending_count"] = -1
         # 实例状态
