@@ -367,7 +367,67 @@ def _cycle():
     log(f"check_done: {out[:150]}")
     out2 = run(["sharedtask.py", "watchdog", "--auto"], timeout=30)
     log(f"watchdog: {out2[:100]}")
+    sync_memory()
+    check_heartbeat()
     log("=== 巡检结束 ===")
+
+
+def sync_memory():
+    """增量同步GitHub共享记忆到本地（节流30分钟），让relevant搜索用最新经验"""
+    try:
+        stamp = os.path.join(PROJECT, ".mem_sync_stamp")
+        now = time.time()
+        if os.path.exists(stamp):
+            if now - os.path.getmtime(stamp) < 1800:
+                return
+        out = run(["shared_mem.py", "sync"], timeout=60)
+        with open(stamp, 'w') as f:
+            f.write(str(now))
+        log(f"共享记忆同步: {out[:100]}")
+    except Exception as e:
+        log(f"共享记忆同步失败: {e}")
+
+
+def check_heartbeat():
+    """检查云电脑实例心跳，last_seen超过30分钟告警"""
+    try:
+        import json, datetime
+        reg_file = os.path.join(PROJECT, "instances.json")
+        if not os.path.exists(reg_file):
+            return
+        with open(reg_file, 'r', encoding='utf-8') as f:
+            reg = json.load(f)
+        now = datetime.datetime.now()
+        stale = []
+        for name, info in reg.get("instances", {}).items():
+            last = info.get("last_seen", "")
+            if not last:
+                stale.append((name, "无心跳记录"))
+                continue
+            try:
+                last_time = datetime.datetime.fromisoformat(last.replace("Z", "+00:00").replace("+08:00", ""))
+                elapsed = (now - last_time).total_seconds() / 60
+                if elapsed > 30:
+                    stale.append((name, f"{elapsed:.0f}分钟无心跳"))
+            except:
+                stale.append((name, "心跳时间解析失败"))
+        if stale:
+            msg = "实例心跳告警: " + ", ".join(f"{n}({s})" for n, s in stale)
+            log(msg)
+            # 写入通知文件，本地AI对话开始时可读
+            notif_file = os.path.join(PROJECT, "_notifications.json")
+            notifs = []
+            if os.path.exists(notif_file):
+                try:
+                    notifs = json.load(open(notif_file, 'r', encoding='utf-8'))
+                except:
+                    notifs = []
+            notifs.append({"time": now.isoformat(), "type": "heartbeat", "msg": msg})
+            notifs = notifs[-20:]
+            with open(notif_file, 'w', encoding='utf-8') as f:
+                json.dump(notifs, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        log(f"心跳检查失败: {e}")
 
 def cycle():
     fd = acquire_cycle_lock()
