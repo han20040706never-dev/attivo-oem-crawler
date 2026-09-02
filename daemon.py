@@ -369,6 +369,7 @@ def _cycle():
     log(f"watchdog: {out2[:100]}")
     sync_memory()
     check_heartbeat()
+    update_state()
     log("=== 巡检结束 ===")
 
 
@@ -428,6 +429,65 @@ def check_heartbeat():
                 json.dump(notifs, f, ensure_ascii=False, indent=2)
     except Exception as e:
         log(f"心跳检查失败: {e}")
+
+
+def update_state():
+    """持久化系统运行状态到_state.json，新对话直接读不用重查"""
+    try:
+        import datetime
+        state = {"last_update": datetime.datetime.now().isoformat()}
+        # 任务统计
+        try:
+            pending_out = run(["sharedtask.py", "pending"], timeout=20)
+            state["pending_count"] = pending_out.count("待处理") if "待处理" in pending_out else 0
+        except:
+            state["pending_count"] = -1
+        # 实例状态
+        try:
+            reg_file = os.path.join(PROJECT, "instances.json")
+            if os.path.exists(reg_file):
+                with open(reg_file, 'r', encoding='utf-8') as f:
+                    reg = json.load(f)
+                state["instances"] = reg.get("instances", {})
+        except:
+            pass
+        # token用量
+        try:
+            sys.path.insert(0, PROJECT)
+            import ai_router
+            state["token_usage_7d"] = ai_router.token_stats(days=7)
+        except:
+            pass
+        # 爬虫进度
+        try:
+            import sqlite3
+            db_path = os.path.join(PROJECT, "oemkb.db")
+            if os.path.exists(db_path):
+                conn = sqlite3.connect(db_path)
+                cur = conn.cursor()
+                cur.execute("SELECT COUNT(*) FROM part")
+                state["oemkb_parts"] = cur.fetchone()[0]
+                cur.execute("SELECT COUNT(*) FROM section WHERE part_done=1")
+                done = cur.fetchone()[0]
+                cur.execute("SELECT COUNT(*) FROM section")
+                total = cur.fetchone()[0]
+                state["oemkb_section_progress"] = f"{done}/{total}"
+                conn.close()
+        except:
+            pass
+        # 通知
+        try:
+            notif_file = os.path.join(PROJECT, "_notifications.json")
+            if os.path.exists(notif_file):
+                notifs = json.load(open(notif_file, 'r', encoding='utf-8'))
+                state["recent_notifications"] = notifs[-5:]
+        except:
+            pass
+        state_file = os.path.join(PROJECT, "_state.json")
+        _atomic_write(state_file, json.dumps(state, ensure_ascii=False, indent=2).encode('utf-8'))
+        log(f"状态已持久化: pending={state.get('pending_count')} parts={state.get('oemkb_parts', '?')}")
+    except Exception as e:
+        log(f"状态持久化失败: {e}")
 
 def cycle():
     fd = acquire_cycle_lock()
