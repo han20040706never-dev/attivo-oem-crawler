@@ -214,6 +214,43 @@ def claim(rid, instance_name):
     print(f"OK: 【{instance_name}】已认领任务 {rid}")
 
 
+def watchdog(hours=24):
+    """检测超时任务：处理中超过N小时未完成的，列出并提示重置"""
+    import datetime
+    data = cli(["+record-list", "--base-token", BASE, "--table-id", TABLE,
+                "--filter-json", json.dumps({"logic": "and", "conditions": [["状态", "==", "处理中"]]}, ensure_ascii=False),
+                "--limit", "50", "--format", "json", "--as", "user"])
+    if not data or not data.get("ok"):
+        print("watchdog: 查询失败"); return
+    recs = parse_matrix(data)
+    if not recs:
+        print("watchdog: 无处理中任务"); return
+    now = datetime.datetime.now()
+    stuck = []
+    for rid, f in recs:
+        upd = cell(f.get("更新时间"))
+        title = cell(f.get("任务标题"))
+        remark = cell(f.get("备注"))
+        claimer = ""
+        for line in remark.split("\n"):
+            if "认领者:" in line:
+                claimer = line.split("认领者:")[-1].strip()
+        try:
+            upd_time = datetime.datetime.fromisoformat(upd.replace("Z", "").replace("+00:00", "").replace("+08:00", ""))
+            elapsed = (now - upd_time).total_seconds() / 3600
+            if elapsed > hours:
+                stuck.append((rid, title, claimer, elapsed))
+        except:
+            stuck.append((rid, title, claimer, -1))
+    if stuck:
+        print(f"watchdog: 发现{len(stuck)}个超时任务(>{hours}h):")
+        for rid, title, claimer, elapsed in stuck:
+            print(f"  {rid} | {title} | 认领者:{claimer} | 已过{elapsed:.1f}h")
+        print("重置: python sharedtask.py set <id> 待处理")
+    else:
+        print("watchdog: 无超时任务")
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("action")
@@ -241,6 +278,8 @@ def main():
     elif a.action == "claim":
         # claim <record_id> <实例名>
         claim(a.rest[0], a.rest[1])
+    elif a.action == "watchdog":
+        watchdog(int(a.rest[0]) if a.rest else 24)
     else:
         print(__doc__)
 
