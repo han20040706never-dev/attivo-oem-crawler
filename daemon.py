@@ -576,6 +576,26 @@ def check_heartbeat():
                     last_time = last_sc.get(inst_name, 0)
                     if time.time() - last_time < 1800:  # 30分钟内不重复创建
                         continue
+                    # 去重：查询飞书表中是否已有该实例的待处理自检任务
+                    _skip = False
+                    try:
+                        from sharedtask import cli, BASE, TABLE, cell as _cell2
+                        _ex = cli(["+record-list", "--base-token", BASE, "--table-id", TABLE,
+                                   "--filter-json", json.dumps({"logic": "and", "conditions": [
+                                       ["状态", "==", "待处理"], ["指派给", "==", inst_name]]}, ensure_ascii=False),
+                                   "--limit", "20", "--format", "json", "--as", "user"])
+                        if _ex and _ex.get("ok"):
+                            _d2 = _ex.get("data", {})
+                            for _r2 in _d2.get("data", []):
+                                _fm2 = {_d2.get("fields", [])[j]: _r2[j] for j in range(min(len(_d2.get("fields", [])), len(_r2)))}
+                                if "自检" in _cell2(_fm2.get("任务标题")):
+                                    log(f"  {inst_name}已有待处理自检任务，跳过")
+                                    _skip = True
+                                    break
+                    except Exception as _e3:
+                        log(f"  去重查询异常({_e3})，继续创建")
+                    if _skip:
+                        continue
                     rid = push("其他", f"{inst_name}自检+心跳更新",
                                f"云电脑实例【{inst_name}】心跳超时。请执行：\n"
                                f"1. cd C:\\attivo-collab\n"
