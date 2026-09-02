@@ -8,6 +8,21 @@ import sys, io, os, subprocess
 sys.stdout = io.TextIOWrapper(sys.stdout.detach(), encoding='utf-8')
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+VERSION = "1.1.0"
+REPO = "han20040706never-dev/attivo-oem-crawler"
+
+def check_update():
+    """检查GitHub上的版本，如果有更新提示"""
+    try:
+        import requests
+        r = requests.get(f"https://raw.githubusercontent.com/{REPO}/main/VERSION", timeout=5)
+        if r.status_code == 200:
+            latest = r.text.strip()
+            if latest != VERSION:
+                print(f"提示: 有新版本 {latest}（当前 {VERSION}），执行 cloud_setup.ps1 更新")
+    except:
+        pass
+
 def run(script, args):
     r = subprocess.run([sys.executable, script] + args, capture_output=True,
                        text=True, encoding="utf-8", errors="replace", timeout=300)
@@ -76,15 +91,22 @@ def cmd_ai(args):
         print(f"AI调用失败: {e}")
 
 def cmd_bootstrap(args):
-    """云电脑启动引导: 拉记忆+查待处理任务"""
+    """云电脑启动引导: 检查更新+拉记忆+查待处理任务"""
+    check_update()
     print("=== 云电脑启动引导 ===")
     run("shared_mem.py", ["bootstrap"])
     print("\n=== 待处理任务 ===")
     run("sharedtask.py", ["pending"])
 
+def cmd_version(args):
+    """显示版本号"""
+    print(f"cloud_ax.py v{VERSION}")
+    check_update()
+
 COMMANDS = {
     "memory": cmd_memory, "task": cmd_task,
     "think": cmd_think, "ai": cmd_ai, "bootstrap": cmd_bootstrap,
+    "version": cmd_version,
 }
 
 if __name__ == "__main__":
