@@ -417,6 +417,7 @@ def _cycle():
     sync_local_memory()
     update_heartbeat()
     check_heartbeat()
+    check_stale_tasks()
     update_state()
     log("=== 巡检结束 ===")
 
@@ -618,6 +619,73 @@ def check_heartbeat():
                 json.dump(notifs, f, ensure_ascii=False, indent=2)
     except Exception as e:
         log(f"心跳检查失败: {e}")
+
+
+def check_stale_tasks():
+    """超过12小时未认领的待处理任务自动提升优先级到高，防止任务被遗忘"""
+    try:
+        import datetime
+        sys.path.insert(0, PROJECT)
+        from sharedtask import cli, BASE, TABLE, cell
+        cache_file = os.path.join(PROJECT, "_task_first_seen.json")
+        first_seen = {}
+        if os.path.exists(cache_file):
+            try:
+                first_seen = json.load(open(cache_file, 'r', encoding='utf-8'))
+            except:
+                first_seen = {}
+        now = time.time()
+        # 获取待处理任务列表
+        data = cli(["+record-list", "--base-token", BASE, "--table-id", TABLE,
+                    "--filter-json", '{"conjunction":"and","conditions":[{"field_name":"状态","operator":"is","value":["待处理"]}]}',
+                    "--limit", "50", "--format", "json", "--as", "user"])
+        if not data or not data.get("ok"):
+            return
+        d = data.get("data", {})
+        rows, cols = d.get("data", []), d.get("fields", [])
+        fmap_idx = {name: i for i, name in enumerate(cols)}
+        stale_upgraded = []
+        for row in rows:
+            rid = row[0] if row else ""
+            if not rid:
+                continue
+            def g3(nm):
+                i = fmap_idx.get(nm, -1)
+                return cell(row[i]) if 0 <= i < len(row) else ""
+            title = g3("任务标题")
+            priority = g3("优先级")
+            # 记录首次发现时间
+            if rid not in first_seen:
+                first_seen[rid] = now
+            elif now - first_seen[rid] > 43200 and priority != "高":  # 12小时
+                # 提升优先级到高
+                try:
+                    cli(["+record-batch-update", "--base-token", BASE, "--table-id", TABLE,
+                         "--json", json.dumps({"update_records": {rid: {"优先级": ["高"]}}}, ensure_ascii=False),
+                         "--as", "user"])
+                    stale_upgraded.append(title[:40])
+                    log(f"  任务老化提升优先级: {title[:40]}")
+                except:
+                    pass
+        # 清理已不存在的任务
+        valid_rids = {row[0] for row in rows if row}
+        first_seen = {k: v for k, v in first_seen.items() if k in valid_rids}
+        with open(cache_file, 'w', encoding='utf-8') as f:
+            json.dump(first_seen, f, ensure_ascii=False)
+        if stale_upgraded:
+            notif_file = os.path.join(PROJECT, "_notifications.json")
+            notifs = []
+            if os.path.exists(notif_file):
+                try:
+                    notifs = json.load(open(notif_file, 'r', encoding='utf-8'))
+                except:
+                    notifs = []
+            notifs.append({"time": datetime.datetime.now().isoformat(), "type": "stale_task",
+                           "msg": f"{len(stale_upgraded)}个任务超12小时未认领，已自动提升优先级: {', '.join(stale_upgraded[:3])}"})
+            with open(notif_file, 'w', encoding='utf-8') as f:
+                json.dump(notifs[-20:], f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        log(f"任务老化检查失败: {e}")
 
 
 def update_state():
