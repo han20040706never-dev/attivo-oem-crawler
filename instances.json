@@ -17,6 +17,12 @@
       "completed": 0,
       "failed": 0,
       "last_seen": "2026-09-02T11:27:06.150455"
+    },
+    "E2E实例": {
+      "tags": [],
+      "completed": 1,
+      "failed": 0,
+      "last_seen": "2026-09-02T11:36:42.249928"
     }
   },
   "_comment": "云电脑实例注册表：instance_name -> {tags: [], completed: 0, failed: 0, last_seen: isoformat}"
