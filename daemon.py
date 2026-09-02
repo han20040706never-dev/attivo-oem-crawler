@@ -10,13 +10,56 @@
   python daemon.py --instance "云电脑 爬虫脚本" --tags "爬虫,数据整理,配件查询" --interval 300
   python daemon.py --once  # 只跑一次
 """
-import sys, io, os, time, subprocess, json, datetime, argparse, re
+import sys, io, os, time, subprocess, json, datetime, argparse, re, hashlib, py_compile, tempfile
 sys.stdout = io.TextIOWrapper(sys.stdout.detach(), encoding='utf-8')
 PROJECT = os.path.dirname(os.path.abspath(__file__))
 PY = sys.executable
 LOG_FILE = os.path.join(PROJECT, "_daemon.log")
 INSTANCE_NAME = os.environ.get("DAEMON_INSTANCE", "")
 INSTANCE_TAGS = os.environ.get("DAEMON_TAGS", "")
+GITHUB_RAW = "https://raw.githubusercontent.com/han20040706never-dev/attivo-oem-crawler/main/"
+AUTO_UPDATE_FILES = ["daemon.py", "sharedtask.py", "shared_mem.py", "check_done.py", "common.py", "install_daemon_task.py"]
+
+def auto_update():
+    """启动时自动检查GitHub更新，有新代码自动下载替换（语法验证通过才生效）"""
+    try:
+        import requests
+        updated = []
+        for fname in AUTO_UPDATE_FILES:
+            local_path = os.path.join(PROJECT, fname)
+            if not os.path.exists(local_path):
+                continue
+            # 下载GitHub最新版
+            r = requests.get(GITHUB_RAW + fname, timeout=15)
+            if r.status_code != 200:
+                continue
+            remote_content = r.text
+            # 比较哈希
+            local_hash = hashlib.md5(open(local_path, 'rb').read()).hexdigest()
+            remote_hash = hashlib.md5(remote_content.encode('utf-8')).hexdigest()
+            if local_hash == remote_hash:
+                continue
+            # 语法验证
+            tmp_path = os.path.join(tempfile.gettempdir(), f"_update_{fname}")
+            with open(tmp_path, 'w', encoding='utf-8') as f:
+                f.write(remote_content)
+            try:
+                py_compile.compile(tmp_path, doraise=True)
+            except py_compile.PyCompileError:
+                log(f"  自动更新跳过 {fname}：语法验证失败")
+                os.remove(tmp_path)
+                continue
+            # 替换本地文件
+            with open(local_path, 'w', encoding='utf-8') as f:
+                f.write(remote_content)
+            os.remove(tmp_path)
+            updated.append(fname)
+        if updated:
+            log(f"  自动更新: {', '.join(updated)}")
+        return updated
+    except Exception as e:
+        log(f"  自动更新检查失败: {e}")
+        return []
 
 def log(msg):
     ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -188,6 +231,9 @@ def main():
         log(f"daemon启动，实例={INSTANCE_NAME}, 标签={INSTANCE_TAGS}, 间隔{a.interval}秒")
     else:
         log(f"daemon启动（仅回收模式，不自动认领）, 间隔{a.interval}秒")
+    
+    # 自动更新：检查GitHub最新代码，有更新自动替换（语法验证通过才生效）
+    auto_update()
     
     # 启动时自动bootstrap：拉取所有历史经验（教学相长）
     boot_out = run(["shared_mem.py", "bootstrap"], timeout=120)
