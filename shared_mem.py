@@ -59,6 +59,59 @@ def search(keyword):
         print("本地无共享记忆文件，先执行 sync-github")
 
 
+def relevant(keywords, top_n=5):
+    """多关键词相关度检索：按匹配关键词数量排序，返回最相关的经验"""
+    kws = [k.strip().lower() for k in keywords.split() if k.strip()]
+    if not kws:
+        print("请提供关键词"); return
+    mem_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "SHARED_MEMORY.md")
+    results = []
+    if os.path.exists(mem_file):
+        with open(mem_file, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+        for i, line in enumerate(lines):
+            score = sum(1 for kw in kws if kw in line.lower())
+            if score > 0:
+                start = max(0, i - 1)
+                end = min(len(lines), i + 3)
+                context = "".join(lines[start:end]).strip()[:200]
+                results.append((score, "[GitHub]", context))
+    # 飞书记忆表
+    try:
+        r = subprocess.run(
+            ["lark-cli", "base", "+record-list",
+             "--base-token", BASE_TOKEN, "--table-id", TABLE_ID,
+             "--limit", "50", "--format", "json", "--as", "user"],
+            capture_output=True, text=True, timeout=30, encoding='utf-8')
+        data = json.loads(r.stdout) if r.stdout.strip() else {}
+        if data.get("ok"):
+            d = data.get("data", {})
+            rows, cols = d.get("data", []), d.get("fields", [])
+            idx = {name: i for i, name in enumerate(cols)}
+            for row in rows:
+                def g(name):
+                    i = idx.get(name, -1)
+                    v = row[i] if 0 <= i < len(row) else ""
+                    if isinstance(v, list): v = v[0] if v else ""
+                    return str(v) if v else ""
+                title = g("标题")
+                content = g("内容")
+                mtype = g("类型")
+                text = f"{title} {content}".lower()
+                score = sum(1 for kw in kws if kw in text)
+                if score > 0:
+                    results.append((score, f"[飞书|{mtype}]", f"{title}: {content[:150]}"))
+    except Exception as e:
+        print(f"飞书检索失败: {e}")
+    results.sort(key=lambda x: -x[0])
+    print(f"=== 相关经验（关键词:{kws}，命中{len(results)}条，Top{top_n}） ===")
+    for score, src, ctx in results[:top_n]:
+        print(f"  匹配{score}词 {src} {ctx}")
+    if not results:
+        print("  无相关经验")
+    return results[:top_n]
+
+
 def pull(limit=10):
     """读取飞书共享记忆表最新记录"""
     r = subprocess.run(
@@ -193,5 +246,7 @@ if __name__ == "__main__":
         bootstrap()
     elif cmd == "search" and len(sys.argv) >= 3:
         search(" ".join(sys.argv[2:]))
+    elif cmd == "relevant" and len(sys.argv) >= 3:
+        relevant(" ".join(sys.argv[2:]))
     else:
         print("参数错误")
