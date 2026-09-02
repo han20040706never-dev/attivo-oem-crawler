@@ -42,6 +42,23 @@ def push(title, mtype, content, tags="", source="本地豆包"):
     except Exception as e:
         print(f"FAIL: {e}")
 
+def search(keyword):
+    """按关键词检索本地共享记忆文件+飞书表"""
+    import os
+    mem_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "SHARED_MEMORY.md")
+    hits = []
+    if os.path.exists(mem_file):
+        with open(mem_file, 'r', encoding='utf-8') as f:
+            for i, line in enumerate(f, 1):
+                if keyword.lower() in line.lower():
+                    hits.append(f"[GitHub L{i}] {line.strip()[:120]}")
+    print(f"=== 搜索'{keyword}'，命中{len(hits)}条 ===")
+    for h in hits[:20]:
+        print(h)
+    if not os.path.exists(mem_file):
+        print("本地无共享记忆文件，先执行 sync-github")
+
+
 def pull(limit=10):
     """读取飞书共享记忆表最新记录"""
     r = subprocess.run(
@@ -169,5 +186,7 @@ if __name__ == "__main__":
         push_github(sys.argv[2], sys.argv[3])
     elif cmd == "bootstrap":
         bootstrap()
+    elif cmd == "search" and len(sys.argv) >= 3:
+        search(" ".join(sys.argv[2:]))
     else:
         print("参数错误")
