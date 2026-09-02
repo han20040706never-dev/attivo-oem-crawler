@@ -68,15 +68,20 @@ def pull(limit=10):
         capture_output=True, text=True, timeout=30, encoding='utf-8')
     try:
         data = json.loads(r.stdout)
-        rows = data.get("data", {}).get("data", [])
-        # 字段顺序: 标题, 标签, 内容, 时间, 来源, 类型
+        d = data.get("data", {})
+        rows = d.get("data", [])
+        cols = d.get("fields", [])
+        # 用字段名映射，不依赖顺序
+        idx = {name: i for i, name in enumerate(cols)} if cols else {}
+        def g(row, name):
+            i = idx.get(name, -1)
+            return row[i] if i >= 0 and i < len(row) else ""
         print(f"=== 共享记忆最新{len(rows)}条 ===")
         for row in rows:
-            title = row[0] if len(row) > 0 else ""
-            tags = row[1] if len(row) > 1 else []
-            content = row[2] if len(row) > 2 else ""
-            source = row[4] if len(row) > 4 else ""
-            mtype = row[5] if len(row) > 5 else ""
+            title = g(row, "标题")
+            content = g(row, "内容")
+            source = g(row, "来源")
+            mtype = g(row, "类型")
             if isinstance(source, list): source = source[0] if source else ""
             if isinstance(mtype, list): mtype = mtype[0] if mtype else ""
             print(f"[{mtype}|{source}] {title}")
