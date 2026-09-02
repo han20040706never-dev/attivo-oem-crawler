@@ -27,10 +27,9 @@ def save_notifications(notifs):
 def add_notification(title, result, status):
     notifs = load_notifications()
     notifs.append({
-        "title": title,
-        "result": result[:300] if result else "",
-        "status": status,
-        "time": datetime.datetime.now().strftime("%m-%d %H:%M")
+        "time": datetime.datetime.now().isoformat(),
+        "type": "task_result",
+        "msg": f"[{status}] {title}: {result[:200] if result else ''}",
     })
     # 只保留最近20条
     save_notifications(notifs[-20:])
@@ -139,10 +138,9 @@ def main():
             # 写入通知
             notifs = load_notifications()
             notifs.append({
-                "title": "云电脑有待回复问题",
-                "result": out[:300],
-                "status": "待回复",
-                "time": datetime.datetime.now().strftime("%m-%d %H:%M")
+                "time": datetime.datetime.now().isoformat(),
+                "type": "question",
+                "msg": f"云电脑有待回复问题: {out[:200]}",
             })
             save_notifications(notifs[-20:])
         else:
