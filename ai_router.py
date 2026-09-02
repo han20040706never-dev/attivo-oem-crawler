@@ -7,7 +7,7 @@
   result = chat("你好")  # 自动选最优provider
   result = chat("你好", provider="gemini")  # 指定provider
 """
-import requests, json, sys, time
+import requests, json, sys, time, os
 from config import PROXIES
 
 # ============ Provider配置 ============
