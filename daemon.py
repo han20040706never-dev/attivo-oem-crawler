@@ -15,6 +15,8 @@
   🟡 缺失文件不创建→本地不存在也下载
 """
 import sys, io, os, time, subprocess, json, datetime, argparse, re, hashlib, tempfile
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from common import log, run, _norm, _atomic_write, _fetch_github_file
 try:
     import msvcrt
 except ImportError:
@@ -46,41 +48,6 @@ TAG_KEYWORDS = {
     "配件查询": ["配件", "查询", "零件", "型号", "兼容", "替代"],
 }
 
-def log(msg):
-    ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    line = f"[{ts}] {msg}"
-    try:
-        print(line, flush=True)
-    except Exception:
-        pass
-    try:
-        with open(LOG_FILE, 'a', encoding='utf-8') as f:
-            f.write(line + "\n")
-        # 日志轮转：超过1MB则截断保留最近500行
-        if os.path.getsize(LOG_FILE) > 1024 * 1024:
-            try:
-                with open(LOG_FILE, 'r', encoding='utf-8') as f:
-                    lines = f.readlines()
-                with open(LOG_FILE, 'w', encoding='utf-8') as f:
-                    f.writelines(lines[-500:])
-            except Exception:
-                pass
-    except OSError:
-        pass
-
-def run(cmd_args, timeout=120):
-    try:
-        r = subprocess.run([PY] + cmd_args, capture_output=True, text=True,
-                           timeout=timeout, encoding='utf-8', cwd=PROJECT)
-        if r.returncode != 0:
-            err = (r.stderr or r.stdout or "").strip()
-            return f"ERROR(exit {r.returncode}): {err[-300:]}"
-        return r.stdout.strip()
-    except subprocess.TimeoutExpired:
-        return f"ERROR(timeout>{timeout}s): {' '.join(cmd_args)[:100]}"
-    except Exception as e:
-        return f"ERROR: {e}"
-
 def acquire_cycle_lock():
     if msvcrt is None:
         return "nolock"
@@ -110,39 +77,6 @@ def release_cycle_lock(fd):
         os.close(fd)
     except OSError:
         pass
-
-def _norm(b):
-    return b.replace(b'\r\n', b'\n').replace(b'\r', b'\n')
-
-def _atomic_write(path, data):
-    tmp = path + f".tmp{os.getpid()}"
-    with open(tmp, 'wb') as f:
-        f.write(data)
-    os.replace(tmp, path)
-
-def _fetch_github_file(fname):
-    """从GitHub获取文件内容，先raw再api.github.com备用，返回bytes或None"""
-    import requests, base64
-    # 通道1: raw.githubusercontent.com（快但常超时）
-    try:
-        r = requests.get(GITHUB_RAW + fname, timeout=5)
-        if r.status_code == 200:
-            return r.content
-    except Exception:
-        pass
-    # 通道2: api.github.com contents API（base64，更稳定）
-    try:
-        sys.path.insert(0, PROJECT)
-        import config
-        H = {'Authorization': f'token {config.GITHUB_PAT}', 'Accept': 'application/vnd.github.v3+json'}
-        r2 = requests.get(f'https://api.github.com/repos/han20040706never-dev/attivo-oem-crawler/contents/{fname}',
-                          headers=H, timeout=15)
-        if r2.status_code == 200:
-            return base64.b64decode(r2.json()['content'])
-    except Exception:
-        pass
-    return None
-
 
 def auto_update():
     try:
