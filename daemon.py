@@ -519,7 +519,7 @@ def check_heartbeat():
                 for inst_name, _ in stale:
                     # 检查是否已有待处理的自检任务
                     data = cli(["+record-list", "--base-token", BASE, "--table-id", TABLE,
-                                "--filter", 'CurrentValue.[状态]="待处理"', "--limit", "50",
+                                "--filter-json", '{"conjunction":"and","conditions":[{"field_name":"状态","operator":"is","value":["待处理"]}]}', "--limit", "50",
                                 "--format", "json", "--as", "user"])
                     has_selfcheck = False
                     if data and data.get("ok"):
