@@ -571,38 +571,34 @@ def check_heartbeat():
             recovery = "恢复步骤：在对应云电脑上运行 cd C:\\attivo-collab; python daemon.py --instance \"实例名\" --tags \"标签\" --interval 300，或运行 python install_daemon_task.py 注册计划任务保活"
             log(msg)
             log(recovery)
-            # 自动创建自检任务唤醒云电脑（每实例最多一个待处理自检任务）
+            # 自动创建自检任务唤醒云电脑（每实例30分钟内最多一个，用本地缓存去重）
             try:
                 sys.path.insert(0, PROJECT)
-                from sharedtask import push, cli, BASE, TABLE, cell
+                from sharedtask import push
+                sc_cache = os.path.join(PROJECT, "_selfcheck_cache.json")
+                last_sc = {}
+                if os.path.exists(sc_cache):
+                    try:
+                        last_sc = json.load(open(sc_cache, 'r', encoding='utf-8'))
+                    except:
+                        last_sc = {}
                 for inst_name, _ in stale:
-                    # 检查是否已有待处理的自检任务
-                    data = cli(["+record-list", "--base-token", BASE, "--table-id", TABLE,
-                                "--filter-json", '{"conjunction":"and","conditions":[{"field_name":"状态","operator":"is","value":["待处理"]}]}', "--limit", "50",
-                                "--format", "json", "--as", "user"])
-                    has_selfcheck = False
-                    if data and data.get("ok"):
-                        d = data.get("data", {})
-                        rows, cols = d.get("data", []), d.get("fields", [])
-                        fmap_idx = {name: i for i, name in enumerate(cols)}
-                        for row in rows:
-                            def g2(nm):
-                                i = fmap_idx.get(nm, -1)
-                                return cell(row[i]) if 0 <= i < len(row) else ""
-                            if "自检" in g2("任务标题") and g2("指派给") == inst_name:
-                                has_selfcheck = True
-                                break
-                    if not has_selfcheck:
-                        rid = push("其他", f"{inst_name}自检+心跳更新",
-                                   f"云电脑实例【{inst_name}】心跳超时。请执行：\n"
-                                   f"1. cd C:\\attivo-collab\n"
-                                   f"2. python daemon.py --instance \"{inst_name}\" --tags \"标签\" --interval 300（后台启动）\n"
-                                   f"   或 python install_daemon_task.py --instance \"{inst_name}\" --tags \"标签\" --interval 300（注册计划任务保活）\n"
-                                   f"3. 确认config.py存在且密钥正确\n"
-                                   f"4. 运行 python sharedtask.py complete <此任务ID> \"自检完成，daemon已启动\" \n"
-                                   f"这是自动唤醒任务，daemon运行时会auto_selfcheck自动执行。",
-                                   "本地豆包(自动唤醒)", inst_name, "高")
-                        log(f"  已发自检任务唤醒{inst_name}: {rid}")
+                    last_time = last_sc.get(inst_name, 0)
+                    if time.time() - last_time < 1800:  # 30分钟内不重复创建
+                        continue
+                    rid = push("其他", f"{inst_name}自检+心跳更新",
+                               f"云电脑实例【{inst_name}】心跳超时。请执行：\n"
+                               f"1. cd C:\\attivo-collab\n"
+                               f"2. python daemon.py --instance \"{inst_name}\" --tags \"标签\" --interval 300（后台启动）\n"
+                               f"   或 python install_daemon_task.py --instance \"{inst_name}\" --tags \"标签\" --interval 300（注册计划任务保活）\n"
+                               f"3. 确认config.py存在且密钥正确\n"
+                               f"4. 运行 python sharedtask.py complete <此任务ID> \"自检完成，daemon已启动\" \n"
+                               f"这是自动唤醒任务，daemon运行时会auto_selfcheck自动执行。",
+                               "本地豆包(自动唤醒)", inst_name, "高")
+                    last_sc[inst_name] = time.time()
+                    log(f"  已发自检任务唤醒{inst_name}: {rid}")
+                with open(sc_cache, 'w', encoding='utf-8') as f:
+                    json.dump(last_sc, f, ensure_ascii=False)
             except Exception as e2:
                 log(f"  自检任务创建失败: {e2}")
             # 写入通知文件，本地AI对话开始时可读
