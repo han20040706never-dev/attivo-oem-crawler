@@ -21,7 +21,7 @@ sys.stdout = io.TextIOWrapper(sys.stdout.detach(), encoding="utf-8")
 BASE = "MYQybnKkZaXY2Yswagyc7pKNnRf"
 TABLE = "tblGwGpuGna0zGQG"
 TYPES = {"信息调研", "内容生产", "文件处理", "代码开发", "数据整理", "其他"}
-STATUSES = {"待处理", "处理中", "已完成", "已取消"}
+STATUSES = {"待处理", "处理中", "已完成", "已取消", "已失败"}
 FIELDS = ["任务编号", "任务标题", "任务类型", "任务内容", "来源", "状态", "结果", "备注", "对话日志", "指派给"]
 
 
@@ -261,6 +261,42 @@ def rate(rid, score, feedback=""):
         print("低分自动创建改进任务")
 
 
+def ask(rid, question, instance_name="云电脑"):
+    """云电脑向本地提问：追加带【待本地回复】标记的消息，bootstrap时自动显示"""
+    chat(rid, f"【待本地回复】{question}", instance_name)
+    print(f"OK: 问题已提交，等待本地回复")
+
+
+def fail(rid, reason, instance_name="云电脑"):
+    """任务失败上报：标记失败+记录原因+push踩坑经验到共享记忆"""
+    # 读取任务信息
+    data = cli(["+record-get", "--base-token", BASE, "--table-id", TABLE,
+                "--record-id", rid, "--format", "json", "--as", "user"])
+    title = ""
+    task_content = ""
+    if data and data.get("ok"):
+        d = data.get("data", {})
+        rows, cols = d.get("data", []), d.get("fields", [])
+        if rows and cols:
+            fmap = {cols[j]: rows[0][j] for j in range(min(len(cols), len(rows[0])))}
+            title = cell(fmap.get("任务标题"))
+            task_content = cell(fmap.get("任务内容"))
+    # 标记失败
+    set_status(rid, "已失败")
+    chat(rid, f"【{instance_name}】任务失败: {reason}", instance_name)
+    # push踩坑经验到共享记忆
+    try:
+        import subprocess
+        exp = f"任务: {task_content[:100]}\n失败原因: {reason}\n执行者: {instance_name}"
+        subprocess.run([sys.executable, "shared_mem.py", "push",
+                        f"[任务失败] {title}", "踩坑教训", exp, "脚本"],
+                       capture_output=True, text=True, timeout=60, encoding="utf-8")
+        print("失败原因已记录到共享记忆(踩坑教训)")
+    except Exception as e:
+        print(f"经验记录失败: {e}")
+    print(f"FAIL: 任务{rid}已标记失败 - {reason}")
+
+
 def list_templates():
     """列出可用任务模板"""
     import os
@@ -338,8 +374,8 @@ def dashboard():
     print(f"\n总计: {total}个任务")
 
 
-def watchdog(hours=24):
-    """检测超时任务：处理中超过N小时未完成的，列出并提示重置"""
+def watchdog(hours=24, auto_reset=False):
+    """检测超时任务：处理中超过N小时未完成的，列出并可选自动重置"""
     import datetime
     data = cli(["+record-list", "--base-token", BASE, "--table-id", TABLE,
                 "--filter-json", json.dumps({"logic": "and", "conditions": [["状态", "==", "处理中"]]}, ensure_ascii=False),
@@ -370,7 +406,10 @@ def watchdog(hours=24):
         print(f"watchdog: 发现{len(stuck)}个超时任务(>{hours}h):")
         for rid, title, claimer, elapsed in stuck:
             print(f"  {rid} | {title} | 认领者:{claimer} | 已过{elapsed:.1f}h")
-        print("重置: python sharedtask.py set <id> 待处理")
+            if auto_reset:
+                set_status(rid, "待处理")
+                chat(rid, f"【系统】超时{elapsed:.0f}h，自动重置为待处理", "系统")
+                print(f"    -> 已自动重置为待处理")
     else:
         print("watchdog: 无超时任务")
 
@@ -406,7 +445,10 @@ def main():
         # claim <record_id> <实例名>
         claim(a.rest[0], a.rest[1])
     elif a.action == "watchdog":
-        watchdog(int(a.rest[0]) if a.rest else 24)
+        # watchdog [小时数] [--auto]
+        hrs = int(a.rest[0]) if a.rest and a.rest[0].isdigit() else 24
+        auto = "--auto" in a.rest
+        watchdog(hrs, auto)
     elif a.action == "dashboard":
         dashboard()
     elif a.action == "templates":
@@ -418,6 +460,12 @@ def main():
     elif a.action == "rate":
         # rate <record_id> <1-5> [反馈]
         rate(a.rest[0], a.rest[1], " ".join(a.rest[2:]) if len(a.rest) > 2 else "")
+    elif a.action == "fail":
+        # fail <record_id> <原因>
+        fail(a.rest[0], " ".join(a.rest[1:]), "云电脑")
+    elif a.action == "ask":
+        # ask <record_id> <问题>
+        ask(a.rest[0], " ".join(a.rest[1:]), "云电脑")
     else:
         print(__doc__)
 
