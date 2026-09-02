@@ -84,6 +84,29 @@ def sync_github(direction="pull"):
     else:
         print(f"FAIL: GitHub获取失败 {r.status_code}")
 
+def bootstrap():
+    """启动引导：pull飞书共享记忆+GitHub记忆，输出汇总供AI注入上下文"""
+    print("=== 启动引导：拉取共享记忆 ===")
+    # 1. 拉GitHub
+    import requests, base64
+    url = f"https://api.github.com/repos/{GH_REPO}/contents/{GH_PATH}"
+    headers = {"Authorization": f"token {config.GITHUB_PAT}", "Accept": "application/vnd.github.v3+json"}
+    try:
+        r = requests.get(url, headers=headers, timeout=10)
+        if r.status_code == 200:
+            content = base64.b64decode(r.json()["content"]).decode('utf-8')
+            print(f"\n--- GitHub共享记忆 ({len(content)}字) ---")
+            print(content[:2000])
+            if len(content) > 2000:
+                print(f"...(共{len(content)}字，已截断)")
+    except Exception as e:
+        print(f"GitHub拉取失败: {e}")
+    # 2. 拉飞书最新5条
+    print("\n--- 飞书共享记忆最新5条 ---")
+    pull(5)
+    print("\n=== 引导完成，以上信息已注入上下文 ===")
+
+
 def push_github(section, content):
     """追加内容到GitHub SHARED_MEMORY.md指定section并push"""
     import requests, base64, datetime
@@ -129,5 +152,7 @@ if __name__ == "__main__":
         sync_github()
     elif cmd == "push-github" and len(sys.argv) >= 4:
         push_github(sys.argv[2], sys.argv[3])
+    elif cmd == "bootstrap":
+        bootstrap()
     else:
         print("参数错误")
