@@ -414,6 +414,7 @@ def _cycle():
     out2 = run(["sharedtask.py", "watchdog", "--auto"], timeout=30)
     log(f"watchdog: {out2[:100]}")
     sync_memory()
+    sync_local_memory()
     update_heartbeat()
     check_heartbeat()
     update_state()
@@ -478,6 +479,58 @@ def update_heartbeat():
             log(f"  心跳push失败: {e}")
     except Exception as e:
         log(f"心跳更新失败: {e}")
+
+
+def sync_local_memory():
+    """本地MEMORY.md过滤机密后同步到GitHub LOCAL_MEMORY.md（云电脑bootstrap可拉取），节流30分钟"""
+    try:
+        stamp = os.path.join(PROJECT, ".local_mem_stamp")
+        now = time.time()
+        if os.path.exists(stamp):
+            if now - os.path.getmtime(stamp) < 1800:
+                return
+        mem_file = os.path.join(PROJECT, "MEMORY.md")
+        if not os.path.exists(mem_file):
+            return
+        with open(mem_file, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+        # 过滤机密行（含密码/密钥/token/secret/PWD/key等关键词的行）
+        SECRET_KEYWORDS = ["密码", "密钥", "token", "secret", "PWD", "password", "api_key", "API_KEY", "private"]
+        filtered = []
+        for line in lines:
+            if not any(kw.lower() in line.lower() for kw in SECRET_KEYWORDS):
+                filtered.append(line)
+        content = "".join(filtered)
+        if len(content.strip()) < 50:
+            return
+        # push到GitHub
+        import requests, base64, hashlib
+        sys.path.insert(0, PROJECT)
+        import config
+        H = {'Authorization': f'token {config.GITHUB_PAT}', 'Accept': 'application/vnd.github.v3+json'}
+        REPO = 'han20040706never-dev/attivo-oem-crawler'
+        content_bytes = content.encode('utf-8')
+        md5 = hashlib.md5(content_bytes).hexdigest()
+        # 检查上次同步的md5
+        last_md5 = ""
+        if os.path.exists(stamp):
+            with open(stamp, 'r') as f:
+                last_md5 = f.read().strip()
+        if md5 == last_md5:
+            return
+        r = requests.get(f'https://api.github.com/repos/{REPO}/contents/LOCAL_MEMORY.md', headers=H, timeout=15)
+        sha = r.json().get('sha') if r.status_code == 200 else None
+        p = {'message': f'LOCAL_MEMORY.md sync ({md5[:8]})', 'content': base64.b64encode(content_bytes).decode()}
+        if sha: p['sha'] = sha
+        r2 = requests.put(f'https://api.github.com/repos/{REPO}/contents/LOCAL_MEMORY.md', headers=H, json=p, timeout=30)
+        if r2.status_code in (200, 201):
+            with open(stamp, 'w') as f:
+                f.write(md5)
+            log(f"本地记忆已同步到GitHub ({len(content)}字)")
+        else:
+            log(f"本地记忆同步失败: {r2.status_code}")
+    except Exception as e:
+        log(f"本地记忆同步异常: {e}")
 
 
 def check_heartbeat():
