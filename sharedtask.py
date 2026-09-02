@@ -244,14 +244,15 @@ def complete(rid, result, experience=""):
 
 
 def claim(rid, instance_name):
-    """云电脑认领任务：先检查状态，已处理中则拒绝（防冲突锁）"""
-    # 先读当前状态
+    """云电脑认领任务：先检查状态和指派人，已处理中则拒绝（防冲突锁）"""
+    # 先读当前状态+指派人
     data = cli(["+record-get", "--base-token", BASE, "--table-id", TABLE,
-                "--record-id", rid, "--field-id", "状态", "--field-id", "备注", "--field-id", "任务标题",
+                "--record-id", rid, "--field-id", "状态", "--field-id", "备注", "--field-id", "任务标题", "--field-id", "指派给",
                 "--format", "json", "--as", "user"])
     current_status = ""
     remark = ""
     task_title = ""
+    assignee = ""
     if data and data.get("ok"):
         d = data.get("data", {})
         rows, cols = d.get("data", []), d.get("fields", [])
@@ -260,6 +261,11 @@ def claim(rid, instance_name):
             current_status = cell(fmap.get("状态"))
             remark = cell(fmap.get("备注"))
             task_title = cell(fmap.get("任务标题"))
+            assignee = cell(fmap.get("指派给"))
+    # 指派人检查：指派给别人的任务不能抢
+    if assignee and assignee != instance_name:
+        print(f"FAIL: 任务{rid}指派给【{assignee}】，你是【{instance_name}】，无权认领")
+        return False
     # 锁检查：已处理中则拒绝
     if current_status == "处理中":
         existing_claimant = ""
