@@ -31,12 +31,11 @@ def run(script, args):
         print((r.stderr or "").strip()[-500:])
 
 def cmd_memory(args):
-    """共享记忆: push/pull/sync-github/push-github/bootstrap/search"""
+    """共享记忆: push/pull/sync-github/push-github/bootstrap/search/relevant"""
     if not args:
-        print("用法: memory push|pull|sync-github|push-github|bootstrap|search")
+        print("用法: memory push|pull|sync-github|push-github|bootstrap|search|relevant")
         return
     if args[0] == "search" and len(args) > 1:
-        # 本地检索已拉取的共享记忆
         keyword = " ".join(args[1:])
         mem_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "SHARED_MEMORY.md")
         if os.path.exists(mem_file):
@@ -49,6 +48,9 @@ def cmd_memory(args):
                 print(h.strip())
         else:
             print("本地无共享记忆文件，先执行 memory sync-github")
+        return
+    if args[0] == "relevant" and len(args) > 1:
+        run("shared_mem.py", ["relevant"] + args[1:])
         return
     run("shared_mem.py", args)
 
@@ -91,12 +93,25 @@ def cmd_ai(args):
         print(f"AI调用失败: {e}")
 
 def cmd_bootstrap(args):
-    """云电脑启动引导: 检查更新+拉记忆+查待处理任务"""
+    """云电脑启动引导: 检查更新+拉记忆+查待处理任务+自动注入相关经验"""
     check_update()
     print("=== 云电脑启动引导 ===")
     run("shared_mem.py", ["bootstrap"])
     print("\n=== 待处理任务 ===")
-    run("sharedtask.py", ["pending"])
+    r = subprocess.run([sys.executable, "sharedtask.py", "pending"], capture_output=True,
+                       text=True, encoding="utf-8", errors="replace", timeout=30)
+    print(r.stdout)
+    # 自动检索相关经验：从待处理任务标题提取关键词
+    import re
+    titles = re.findall(r'\| ([^|]+)$', r.stdout, re.MULTILINE)
+    if titles:
+        # 取第一个任务标题做关键词
+        first_title = titles[0].strip()
+        # 提取中文词和英文词作为关键词
+        keywords = " ".join(re.findall(r'[\u4e00-\u9fa5]{2,}|[a-zA-Z]{3,}', first_title))
+        if keywords:
+            print(f"\n=== 自动检索相关经验（关键词:{keywords}） ===")
+            run("shared_mem.py", ["relevant", keywords])
 
 def cmd_version(args):
     """显示版本号"""
