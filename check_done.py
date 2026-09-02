@@ -96,6 +96,25 @@ def main():
                 if result:
                     print(f"  结果: {result[:200]}")
                 add_notification(title, result, status)
+                # 代码开发任务完成时自动跑代码质量门禁
+                task_type = cell(fmap.get("类型"))
+                if status == "已完成" and task_type == "代码开发":
+                    print(f"  🔍 自动代码质量检查...")
+                    try:
+                        cq = subprocess.run([sys.executable, os.path.join(PROJECT, "code_quality_gate.py"), "--all"],
+                                            capture_output=True, text=True, timeout=60, encoding='utf-8', cwd=PROJECT)
+                        cq_out = cq.stdout.strip()
+                        print(f"  {cq_out[-300:]}")
+                        if "失败" in cq_out and "0失败" not in cq_out:
+                            notifs = load_notifications()
+                            notifs.append({
+                                "time": datetime.datetime.now().isoformat(),
+                                "type": "code_quality",
+                                "msg": f"⚠️ 代码质量门禁未通过: {title} - {cq_out[-200:]}",
+                            })
+                            save_notifications(notifs[-20:])
+                    except Exception as e:
+                        print(f"  代码质量检查失败: {e}")
                 try:
                     note = f"[本地已回收 {datetime.datetime.now().strftime('%m-%d %H:%M')}]"
                     new_remark = (remark + "\n" + note).strip() if remark else note
