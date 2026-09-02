@@ -97,7 +97,7 @@ def relevant(keywords, top_n=5):
         r = subprocess.run(
             ["lark-cli", "base", "+record-list",
              "--base-token", BASE_TOKEN, "--table-id", TABLE_ID,
-             "--limit", "50", "--format", "json", "--as", "user"],
+             "--limit", "200", "--format", "json", "--as", "user"],
             capture_output=True, text=True, timeout=30, encoding='utf-8')
         data = json.loads(r.stdout) if r.stdout.strip() else {}
         if data.get("ok"):
