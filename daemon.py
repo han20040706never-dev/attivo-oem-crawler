@@ -299,6 +299,11 @@ print(f"DONE: {ok}/{len(sections)} ok, {err} errors")
             return f"ERROR: 爬虫脚本运行失败 {result[-150:]}"
         if not result.startswith("DONE"):
             return f"ERROR: 异常输出 {result[-150:]}"
+        # 验证：解析DONE输出，ok=0说明全部失败，不应标成功
+        import re
+        m = re.search(r'DONE: (\d+)/(\d+) ok', result)
+        if m and int(m.group(1)) == 0:
+            return f"ERROR: 爬虫0成功({result[-150:]})"
         return f"自动爬取完成: {result[-200:]}"
     except Exception as e:
         return f"ERROR: 自动爬取失败 {e}"
