@@ -8,3 +8,18 @@ __pycache__/
 !package.json
 
 .odoo_cache.json
+
+# 大文件/数据库/临时文件（不同步到云电脑）
+oemkb.db
+*.db
+*.db-journal
+_state.json
+_notifications.json
+_token_usage.jsonl
+_feishu_mem_cache.json
+_pending_ai_tasks.txt
+_daemon.log
+.mem_state.json
+.auto_update_stamp
+_*.py
+_*.tmp
