@@ -110,7 +110,7 @@ def main():
                     note = f"[本地已回收 {datetime.datetime.now().strftime('%m-%d %H:%M')}]"
                     new_remark = (remark + "\n" + note).strip() if remark else note
                     cli(["+record-batch-update", "--base-token", BASE, "--table-id", TABLE,
-                         "--json", json.dumps({"records": [{"record_id": rid, "fields": {"备注": new_remark}}]}, ensure_ascii=False),
+                         "--json", json.dumps({"update_records": {rid: {"备注": new_remark}}}, ensure_ascii=False),
                          "--as", "user"])
                 except:
                     pass
