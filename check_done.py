@@ -6,6 +6,10 @@ check_done.py — 本地主动轮询：自动回收云电脑已完成的任务
 """
 import sys, io, os, json, subprocess, datetime
 sys.stdout = io.TextIOWrapper(sys.stdout.detach(), encoding='utf-8')
+PROJECT = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, PROJECT)
+from common import cli, cell
+sys.stdout = io.TextIOWrapper(sys.stdout.detach(), encoding='utf-8')
 
 PROJECT = os.path.dirname(os.path.abspath(__file__))
 CACHE = os.path.join(PROJECT, "done_cache.json")
@@ -46,19 +50,6 @@ def load_cache():
 def save_cache(cache):
     with open(CACHE, 'w', encoding='utf-8') as f:
         json.dump(cache, f, ensure_ascii=False, indent=2)
-
-def cli(args):
-    try:
-        r = subprocess.run(["lark-cli", "base"] + args, capture_output=True, text=True, timeout=30, encoding='utf-8')
-        return json.loads(r.stdout) if r.stdout.strip().startswith("{") else None
-    except Exception as e:
-        print(f"CLI错误: {e}")
-        return None
-
-def cell(v):
-    if isinstance(v, list):
-        return " ".join(str(x.get("text", "")) if isinstance(x, dict) else str(x) for x in v)
-    return str(v) if v else ""
 
 def main():
     BASE = "MYQybnKkZaXY2Yswagyc7pKNnRf"
