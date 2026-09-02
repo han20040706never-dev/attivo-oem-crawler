@@ -534,7 +534,7 @@ def check_heartbeat():
                                 has_selfcheck = True
                                 break
                     if not has_selfcheck:
-                        rid = push("系统维护", f"{inst_name}自检+心跳更新",
+                        rid = push("其他", f"{inst_name}自检+心跳更新",
                                    f"云电脑实例【{inst_name}】心跳超时，请执行：1.更新last_seen到instances.json并push 2.报告daemon运行状态 3.报告代码版本。这是自动唤醒任务，daemon应自动执行。",
                                    "本地豆包(自动唤醒)", inst_name, "高")
                         log(f"  已发自检任务唤醒{inst_name}: {rid}")
