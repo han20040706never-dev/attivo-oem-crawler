@@ -175,6 +175,69 @@ def sync_github(direction="pull"):
     else:
         print(f"FAIL: GitHub获取失败 {r.status_code}")
 
+def sync():
+    """轻量增量同步：检测GitHub和飞书变更，只拉新内容，输出变更摘要"""
+    import requests, base64, datetime
+    state_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".mem_state.json")
+    state = {}
+    if os.path.exists(state_file):
+        try:
+            with open(state_file, 'r', encoding='utf-8') as f:
+                state = json.load(f)
+        except:
+            pass
+    
+    changes = []
+    # 1. 检测GitHub SHARED_MEMORY.md变更（通过commit SHA）
+    try:
+        url = f"https://api.github.com/repos/{GH_REPO}/commits?path={GH_PATH}&per_page=1"
+        headers = {"Authorization": f"token {config.GITHUB_PAT}", "Accept": "application/vnd.github.v3+json"}
+        r = requests.get(url, headers=headers, timeout=10)
+        if r.status_code == 200 and r.json():
+            latest_sha = r.json()[0]["sha"]
+            if latest_sha != state.get("github_sha"):
+                sync_github("pull")
+                state["github_sha"] = latest_sha
+                changes.append("GitHub记忆已更新")
+    except Exception as e:
+        print(f"GitHub检测失败: {e}")
+    
+    # 2. 检测飞书新记录
+    try:
+        r = subprocess.run(
+            ["lark-cli", "base", "+record-list",
+             "--base-token", BASE_TOKEN, "--table-id", TABLE_ID,
+             "--page-size", "5", "--format", "json", "--as", "user"],
+            capture_output=True, text=True, timeout=30, encoding='utf-8')
+        data = json.loads(r.stdout)
+        d = data.get("data", {})
+        rows, cols = d.get("data", []), d.get("fields", [])
+        if rows and cols:
+            idx = {name: i for i, name in enumerate(cols)}
+            latest_time = ""
+            for row in rows:
+                t = row[idx.get("创建时间", -1)] if "创建时间" in idx else ""
+                if isinstance(t, list) and t: t = t[0]
+                if t and str(t) > latest_time:
+                    latest_time = str(t)
+            if latest_time and latest_time > state.get("feishu_last", ""):
+                # 有新记录，拉最新3条
+                pull(3)
+                state["feishu_last"] = latest_time
+                changes.append("飞书有新记忆")
+    except Exception as e:
+        print(f"飞书检测失败: {e}")
+    
+    state["last_sync"] = datetime.datetime.now().isoformat()
+    with open(state_file, 'w', encoding='utf-8') as f:
+        json.dump(state, f, ensure_ascii=False, indent=2)
+    
+    if changes:
+        print(f"\n同步完成: {', '.join(changes)}")
+    else:
+        print("无变更，记忆已是最新")
+
+
 def bootstrap():
     """启动引导：增量拉取飞书共享记忆+GitHub记忆，输出汇总供AI注入上下文"""
     import os, json, datetime
@@ -260,6 +323,8 @@ if __name__ == "__main__":
         push_github(sys.argv[2], sys.argv[3])
     elif cmd == "bootstrap":
         bootstrap()
+    elif cmd == "sync":
+        sync()
     elif cmd == "search" and len(sys.argv) >= 3:
         search(" ".join(sys.argv[2:]))
     elif cmd == "relevant" and len(sys.argv) >= 3:
