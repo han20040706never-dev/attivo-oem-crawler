@@ -1,0 +1,23 @@
+{
+  "instances": {
+    "云电脑A": {
+      "tags": [
+        "爬虫",
+        "数据整理"
+      ],
+      "completed": 0,
+      "failed": 0,
+      "last_seen": "2026-09-02T11:27:06.034932"
+    },
+    "云电脑B": {
+      "tags": [
+        "内容生产",
+        "翻译"
+      ],
+      "completed": 0,
+      "failed": 0,
+      "last_seen": "2026-09-02T11:27:06.150455"
+    }
+  },
+  "_comment": "云电脑实例注册表：instance_name -> {tags: [], completed: 0, failed: 0, last_seen: isoformat}"
+}
