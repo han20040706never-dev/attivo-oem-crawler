@@ -812,6 +812,32 @@ def update_state():
                 state["recent_notifications"] = notifs[-5:]
         except:
             pass
+        # 最近完成的任务（新对话快速恢复上下文）
+        try:
+            data = cli(["+record-list", "--base-token", BASE, "--table-id", TABLE,
+                        "--filter-json", '{"conjunction":"and","conditions":[{"field_name":"状态","operator":"is","value":["已完成"]}]}',
+                        "--limit", "10", "--format", "json", "--as", "user"])
+            if data and data.get("ok"):
+                d = data.get("data", {})
+                rows, cols = d.get("data", []), d.get("fields", [])
+                fmap_idx = {name: i for i, name in enumerate(cols)}
+                recent = []
+                for row in rows[:5]:
+                    def g4(nm):
+                        i = fmap_idx.get(nm, -1)
+                        return cell(row[i]) if 0 <= i < len(row) else ""
+                    recent.append({"title": g4("任务标题")[:40], "result": g4("结果")[:80],
+                                   "assignee": g4("指派给"), "type": g4("类型")})
+                state["recent_completed"] = recent
+        except:
+            pass
+        # 代码版本
+        try:
+            ver_file = os.path.join(PROJECT, "VERSION")
+            if os.path.exists(ver_file):
+                state["code_version"] = open(ver_file).read().strip()
+        except:
+            pass
         state_file = os.path.join(PROJECT, "_state.json")
         _atomic_write(state_file, json.dumps(state, ensure_ascii=False, indent=2).encode('utf-8'))
         log(f"状态已持久化: pending={state.get('pending_count')} parts={state.get('oemkb_parts', '?')}")
