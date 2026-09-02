@@ -99,6 +99,42 @@ CACHE_TTL = 3600  # 缓存1小时
 
 import hashlib
 
+_TOKEN_LOG = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_token_usage.jsonl")
+
+def _log_token(provider, model, prompt_tokens, completion_tokens, task=""):
+    try:
+        import datetime
+        entry = {"time": datetime.datetime.now().isoformat(), "provider": provider, "model": model,
+                 "prompt_tokens": prompt_tokens, "completion_tokens": completion_tokens,
+                 "total_tokens": prompt_tokens + completion_tokens, "task": task}
+        with open(_TOKEN_LOG, 'a', encoding='utf-8') as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except:
+        pass
+
+def token_stats(days=7):
+    try:
+        import datetime
+        cutoff = (datetime.datetime.now() - datetime.timedelta(days=days)).isoformat()
+        total = calls = 0
+        by_provider = {}
+        by_task = {}
+        if os.path.exists(_TOKEN_LOG):
+            with open(_TOKEN_LOG, 'r', encoding='utf-8') as f:
+                for line in f:
+                    try:
+                        e = json.loads(line.strip())
+                        if e["time"] < cutoff: continue
+                        calls += 1
+                        total += e["total_tokens"]
+                        by_provider[e["provider"]] = by_provider.get(e["provider"], 0) + e["total_tokens"]
+                        t = e.get("task", "")
+                        by_task[t] = by_task.get(t, 0) + e["total_tokens"]
+                    except: continue
+        return {"calls": calls, "total_tokens": total, "by_provider": by_provider, "by_task": by_task}
+    except Exception as ex:
+        return {"error": str(ex)}
+
 def _cache_key(prompt, task, model):
     return hashlib.md5(f"{task}:{model}:{prompt[:500]}".encode()).hexdigest()
 
@@ -125,7 +161,11 @@ def _call_openai(pname, messages, max_tokens=2048, temperature=0.3, timeout=60):
         if r.status_code != 200:
             print(f"[AI:{pname}] {r.status_code}: {r.text[:150]}", file=sys.stderr)
             return None
-        return r.json()["choices"][0]["message"]["content"].strip()
+        resp = r.json()
+        usage = resp.get("usage", {})
+        if usage:
+            _log_token(pname, p["model"], usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0))
+        return resp["choices"][0]["message"]["content"].strip()
     return None
 
 
