@@ -9,6 +9,31 @@ sys.stdout = io.TextIOWrapper(sys.stdout.detach(), encoding='utf-8')
 
 PROJECT = os.path.dirname(os.path.abspath(__file__))
 CACHE = os.path.join(PROJECT, "done_cache.json")
+NOTIF = os.path.join(PROJECT, "_notifications.json")
+
+def load_notifications():
+    try:
+        if os.path.exists(NOTIF):
+            with open(NOTIF, 'r', encoding='utf-8') as f:
+                return json.load(f)
+    except:
+        pass
+    return []
+
+def save_notifications(notifs):
+    with open(NOTIF, 'w', encoding='utf-8') as f:
+        json.dump(notifs, f, ensure_ascii=False, indent=2)
+
+def add_notification(title, result, status):
+    notifs = load_notifications()
+    notifs.append({
+        "title": title,
+        "result": result[:300] if result else "",
+        "status": status,
+        "time": datetime.datetime.now().strftime("%m-%d %H:%M")
+    })
+    # 只保留最近20条
+    save_notifications(notifs[-20:])
 
 def load_cache():
     try:
@@ -80,6 +105,7 @@ def main():
                 print(f"\n  {tag}【{title}】")
                 if result:
                     print(f"  结果: {result[:200]}")
+                add_notification(title, result, status)
                 try:
                     note = f"[本地已回收 {datetime.datetime.now().strftime('%m-%d %H:%M')}]"
                     new_remark = (remark + "\n" + note).strip() if remark else note
