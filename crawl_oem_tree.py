@@ -27,8 +27,8 @@ CREATE TABLE IF NOT EXISTS fetched(url TEXT PRIMARY KEY, ts TEXT);
 
 
 class OEMTreeCrawler(CrawlerBase):
-    def __init__(self):
-        super().__init__(db_path=DB, delay=0.7)
+    def __init__(self, db_path=None, delay=0.7):
+        super().__init__(db_path=db_path or DB, delay=delay)
         self.init_db(SCHEMA)
 
     def stage_families(self, brand):
