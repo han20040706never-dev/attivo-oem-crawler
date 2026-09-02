@@ -111,6 +111,30 @@ def _atomic_write(path, data):
         f.write(data)
     os.replace(tmp, path)
 
+def _fetch_github_file(fname):
+    """从GitHub获取文件内容，先raw再api.github.com备用，返回bytes或None"""
+    import requests, base64
+    # 通道1: raw.githubusercontent.com（快但常超时）
+    try:
+        r = requests.get(GITHUB_RAW + fname, timeout=5)
+        if r.status_code == 200:
+            return r.content
+    except Exception:
+        pass
+    # 通道2: api.github.com contents API（base64，更稳定）
+    try:
+        sys.path.insert(0, PROJECT)
+        import config
+        H = {'Authorization': f'token {config.GITHUB_PAT}', 'Accept': 'application/vnd.github.v3+json'}
+        r2 = requests.get(f'https://api.github.com/repos/han20040706never-dev/attivo-oem-crawler/contents/{fname}',
+                          headers=H, timeout=15)
+        if r2.status_code == 200:
+            return base64.b64decode(r2.json()['content'])
+    except Exception:
+        pass
+    return None
+
+
 def auto_update():
     try:
         import requests
@@ -122,14 +146,10 @@ def auto_update():
             pass
         pending, failures = [], []
         for fname in AUTO_UPDATE_FILES:
-            try:
-                r = requests.get(GITHUB_RAW + fname, timeout=5)
-            except Exception as e:
-                failures.append(f"{fname}:{type(e).__name__}")
+            remote_bytes = _fetch_github_file(fname)
+            if remote_bytes is None:
+                failures.append(f"{fname}:双通道均失败")
                 continue
-            if r.status_code != 200:
-                continue
-            remote_bytes = r.content
             try:
                 local_bytes = open(os.path.join(PROJECT, fname), 'rb').read() if os.path.exists(os.path.join(PROJECT, fname)) else b''
             except OSError:
@@ -431,6 +451,17 @@ def sync_memory():
             if now - os.path.getmtime(stamp) < 1800:
                 return
         out = run(["shared_mem.py", "sync"], timeout=60)
+        # 同时拉取本地豆包记忆LOCAL_MEMORY.md（云电脑运行期间也能获取本地最新经验）
+        try:
+            lm_bytes = _fetch_github_file("LOCAL_MEMORY.md")
+            if lm_bytes and len(lm_bytes) > 100:
+                lm_path = os.path.join(PROJECT, "LOCAL_MEMORY.md")
+                old = open(lm_path, 'rb').read() if os.path.exists(lm_path) else b''
+                if old != lm_bytes:
+                    _atomic_write(lm_path, lm_bytes)
+                    log(f"本地记忆已更新: {len(lm_bytes)}字")
+        except Exception:
+            pass
         with open(stamp, 'w') as f:
             f.write(str(now))
         log(f"共享记忆同步: {out[:100]}")
