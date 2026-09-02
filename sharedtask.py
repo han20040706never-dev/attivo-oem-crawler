@@ -22,7 +22,8 @@ BASE = "MYQybnKkZaXY2Yswagyc7pKNnRf"
 TABLE = "tblGwGpuGna0zGQG"
 TYPES = {"信息调研", "内容生产", "文件处理", "代码开发", "数据整理", "其他"}
 STATUSES = {"待处理", "处理中", "已完成", "已取消", "已失败"}
-FIELDS = ["任务编号", "任务标题", "任务类型", "任务内容", "来源", "状态", "结果", "备注", "对话日志", "指派给"]
+FIELDS = ["任务编号", "任务标题", "任务类型", "任务内容", "来源", "状态", "结果", "备注", "对话日志", "指派给", "优先级"]
+PRIORITY_ORDER = {"高": 0, "中": 1, "低": 2}
 
 
 def cli(args):
@@ -68,12 +69,20 @@ def list_by_status(status=None):
     recs = parse_matrix(data)
     if not recs:
         print("（无记录）"); return
+    # 按优先级排序：高→中→低，同优先级按创建时间
+    def sort_key(item):
+        rid, f = item
+        pri = cell(f.get("优先级")) or "中"
+        return (PRIORITY_ORDER.get(pri, 1), cell(f.get("任务编号")))
+    recs.sort(key=sort_key)
     for rid, f in recs:
         no = cell(f.get("任务编号"))
         st = cell(f.get("状态")); src = cell(f.get("来源")); tp = cell(f.get("任务类型"))
         title = cell(f.get("任务标题"))
         assignee = cell(f.get("指派给"))
-        line = f"[{rid}] {no} | {st} | {src} | {tp} | {title}"
+        pri = cell(f.get("优先级")) or "中"
+        pri_icon = {"高": "🔴", "中": "🟡", "低": "🟢"}.get(pri, "⚪")
+        line = f"[{rid}] {pri_icon}{pri} | {no} | {st} | {src} | {tp} | {title}"
         if assignee:
             line += f" → {assignee}"
         print(line)
@@ -81,11 +90,13 @@ def list_by_status(status=None):
             print("    结果:", cell(f.get("结果"))[:500])
 
 
-def push(typ, title, content, remark="", assignee=""):
+def push(typ, title, content, remark="", assignee="", priority="中"):
     if typ not in TYPES:
         print("类型非法，可选:", "/".join(TYPES)); return
+    if priority not in PRIORITY_ORDER:
+        priority = "中"
     fields = {"任务标题": title, "任务类型": [typ], "任务内容": content,
-              "来源": ["本地豆包"], "状态": ["待处理"]}
+              "来源": ["本地豆包"], "状态": ["待处理"], "优先级": [priority]}
     if remark:
         fields["备注"] = remark
     if assignee:
@@ -507,10 +518,11 @@ def main():
     p.add_argument("rest", nargs="*")
     a = p.parse_args()
     if a.action == "push":
-        # push <类型> <标题> <内容> [备注] [指派给]
+        # push <类型> <标题> <内容> [备注] [指派给] [优先级:高/中/低]
         push(a.rest[0], a.rest[1], a.rest[2],
              a.rest[3] if len(a.rest) > 3 else "",
-             a.rest[4] if len(a.rest) > 4 else "")
+             a.rest[4] if len(a.rest) > 4 else "",
+             a.rest[5] if len(a.rest) > 5 else "中")
     elif a.action == "pending":
         list_by_status("待处理")
     elif a.action == "done":
