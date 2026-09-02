@@ -157,6 +157,23 @@ def view(rid):
         print(chat_log)
 
 
+def _bump_instance(instance_name, field="completed"):
+    """更新实例完成/失败计数"""
+    try:
+        reg_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "instances.json")
+        reg = {}
+        if os.path.exists(reg_file):
+            with open(reg_file, 'r', encoding='utf-8') as f:
+                reg = json.load(f)
+        inst = reg.get("instances", {}).get(instance_name, {"tags": [], "completed": 0, "failed": 0})
+        inst[field] = inst.get(field, 0) + 1
+        reg.setdefault("instances", {})[instance_name] = inst
+        with open(reg_file, 'w', encoding='utf-8') as f:
+            json.dump(reg, f, ensure_ascii=False, indent=2)
+    except:
+        pass
+
+
 def complete(rid, result, experience=""):
     """完成任务并用免费AI提取结构化经验回收到共享记忆"""
     set_status(rid, "已完成", result)
@@ -197,6 +214,16 @@ def complete(rid, result, experience=""):
         print("经验已AI提取并回收到共享记忆")
     except Exception as e:
         print(f"经验回收失败: {e}")
+    # 更新实例完成计数
+    claimant = ""
+    try:
+        for line in cell(fmap.get("备注", "")).split("\n"):
+            if "认领者:" in line:
+                claimant = line.split("认领者:")[-1].strip()
+    except:
+        pass
+    if claimant:
+        _bump_instance(claimant, "completed")
 
 
 def claim(rid, instance_name):
@@ -232,6 +259,21 @@ def claim(rid, instance_name):
          "--json", json.dumps({"update_records": {rid: {"备注": new_remark}}}, ensure_ascii=False),
          "--as", "user"])
     print(f"OK: 【{instance_name}】已认领任务 {rid}")
+    # 自动注册实例到instances.json
+    try:
+        import datetime
+        reg_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "instances.json")
+        reg = {}
+        if os.path.exists(reg_file):
+            with open(reg_file, 'r', encoding='utf-8') as f:
+                reg = json.load(f)
+        inst = reg.get("instances", {}).get(instance_name, {"tags": [], "completed": 0, "failed": 0})
+        inst["last_seen"] = datetime.datetime.now().isoformat()
+        reg.setdefault("instances", {})[instance_name] = inst
+        with open(reg_file, 'w', encoding='utf-8') as f:
+            json.dump(reg, f, ensure_ascii=False, indent=2)
+    except:
+        pass
     return True
 
 
@@ -339,6 +381,7 @@ def fail(rid, reason, instance_name="云电脑"):
     except Exception as e:
         print(f"经验记录失败: {e}")
     print(f"FAIL: 任务{rid}已标记失败 - {reason}")
+    _bump_instance(instance_name, "failed")
 
 
 def list_templates():
