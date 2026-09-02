@@ -131,10 +131,15 @@ def cmd_config_import(args):
     except Exception as e:
         print(f"导入失败: {e}")
 
+def cmd_healthcheck(args):
+    """系统健康自检：任务卡死/记忆冗余/配置/版本/API"""
+    run("healthcheck.py", [])
+
 COMMANDS = {
     "memory": cmd_memory, "task": cmd_task,
     "think": cmd_think, "ai": cmd_ai, "bootstrap": cmd_bootstrap,
     "version": cmd_version, "config-export": cmd_config_export, "config-import": cmd_config_import,
+    "healthcheck": cmd_healthcheck,
 }
 
 if __name__ == "__main__":
