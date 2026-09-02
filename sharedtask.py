@@ -224,7 +224,11 @@ def complete(rid, result, experience=""):
         subprocess.run([sys.executable, "shared_mem.py", "push",
                         f"[任务完成] {title}", "已完成任务", final_exp, "脚本"],
                        capture_output=True, text=True, timeout=60, encoding="utf-8", cwd=PROJECT)
-        print("经验已AI提取并回收到共享记忆")
+        # 同步到GitHub SHARED_MEMORY.md（双通道收敛，避免relevant只看到旧镜像）
+        subprocess.run([sys.executable, "shared_mem.py", "push-github",
+                        "已完成任务", f"[{title}] {structured[:300]}"],
+                       capture_output=True, text=True, timeout=30, encoding="utf-8", cwd=PROJECT)
+        print("经验已AI提取并回收到共享记忆(飞书+GitHub)")
     except Exception as e:
         print(f"经验回收失败: {e}")
     # 更新实例完成计数
@@ -523,7 +527,10 @@ def fail(rid, reason, instance_name="云电脑"):
         subprocess.run([sys.executable, "shared_mem.py", "push",
                         f"[任务失败] {title}", "踩坑教训", exp, "脚本"],
                        capture_output=True, text=True, timeout=60, encoding="utf-8", cwd=PROJECT)
-        print("失败原因已记录到共享记忆(踩坑教训)")
+        subprocess.run([sys.executable, "shared_mem.py", "push-github",
+                        "踩坑教训", f"[{title}] {reason[:200]}"],
+                       capture_output=True, text=True, timeout=30, encoding="utf-8", cwd=PROJECT)
+        print("失败原因已记录到共享记忆(飞书+GitHub)")
     except Exception as e:
         print(f"经验记录失败: {e}")
     print(f"FAIL: 任务{rid}已标记失败 - {reason}")
@@ -620,21 +627,49 @@ def watchdog(hours=24, auto_reset=False):
         print("watchdog: 无处理中任务"); return
     now = datetime.datetime.now()
     stuck = []
+    parse_fail = 0
     for rid, f in recs:
         upd = cell(f.get("更新时间"))
         title = cell(f.get("任务标题"))
         remark = cell(f.get("备注"))
+        raw_chat = f.get("对话日志", "")
+        if isinstance(raw_chat, list):
+            chat_log = "".join(x.get("text", "") for x in raw_chat if isinstance(x, dict))
+        else:
+            chat_log = str(raw_chat or "")
         claimer = ""
         for line in remark.split("\n"):
             if "认领者:" in line:
                 claimer = line.split("认领者:")[-1].strip()
-        try:
-            upd_time = datetime.datetime.fromisoformat(upd.replace("Z", "").replace("+00:00", "").replace("+08:00", ""))
-            elapsed = (now - upd_time).total_seconds() / 3600
-            if elapsed > hours:
-                stuck.append((rid, title, claimer, elapsed))
-        except:
-            stuck.append((rid, title, claimer, -1))
+        # 健壮时间解析：尝试多种格式
+        upd_time = None
+        for fmt in [None, "%Y-%m-%d %H:%M:%S", "%Y/%m/%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"]:
+            try:
+                if fmt is None:
+                    upd_time = datetime.datetime.fromisoformat(upd.replace("Z", "+00:00").replace("+00:00", "").replace("+08:00", ""))
+                else:
+                    upd_time = datetime.datetime.strptime(upd.split(".")[0].split("+")[0].replace("T", " "), fmt)
+                break
+            except:
+                continue
+        if upd_time is None:
+            parse_fail += 1
+            print(f"watchdog: 时间解析失败跳过 {rid} {title} (raw={upd[:30]})")
+            continue
+        elapsed = (now - upd_time).total_seconds() / 3600
+        if elapsed > hours:
+            # 二次确认：最近对话日志有活动（ask/reply）则不重置
+            recent_activity = False
+            for line in chat_log.split("\n")[-5:]:
+                if any(kw in line for kw in ["待本地回复", "本地回复", "已认领", "执行中", "进度"]):
+                    recent_activity = True
+                    break
+            if recent_activity and elapsed < hours * 2:
+                print(f"watchdog: {rid} 超时但有近期对话活动，跳过重置")
+                continue
+            stuck.append((rid, title, claimer, elapsed))
+    if parse_fail:
+        print(f"watchdog: {parse_fail}个任务时间解析失败已跳过（不重置）")
     if stuck:
         print(f"watchdog: 发现{len(stuck)}个超时任务(>{hours}h):")
         for rid, title, claimer, elapsed in stuck:
@@ -651,6 +686,7 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("action")
     p.add_argument("rest", nargs="*")
+    p.add_argument("--auto", action="store_true", help="watchdog自动重置")
     a = p.parse_args()
     if a.action == "push":
         # push <类型> <标题> <内容> [备注] [指派给] [优先级:高/中/低]
@@ -681,8 +717,7 @@ def main():
     elif a.action == "watchdog":
         # watchdog [小时数] [--auto]
         hrs = int(a.rest[0]) if a.rest and a.rest[0].isdigit() else 24
-        auto = "--auto" in a.rest
-        watchdog(hrs, auto)
+        watchdog(hrs, a.auto)
     elif a.action == "dashboard":
         dashboard()
     elif a.action == "templates":
