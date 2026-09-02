@@ -22,7 +22,7 @@ BASE = "MYQybnKkZaXY2Yswagyc7pKNnRf"
 TABLE = "tblGwGpuGna0zGQG"
 TYPES = {"信息调研", "内容生产", "文件处理", "代码开发", "数据整理", "其他"}
 STATUSES = {"待处理", "处理中", "已完成", "已取消"}
-FIELDS = ["任务编号", "任务标题", "任务类型", "任务内容", "来源", "状态", "结果", "备注", "对话日志"]
+FIELDS = ["任务编号", "任务标题", "任务类型", "任务内容", "来源", "状态", "结果", "备注", "对话日志", "指派给"]
 
 
 def cli(args):
@@ -72,23 +72,29 @@ def list_by_status(status=None):
         no = cell(f.get("任务编号"))
         st = cell(f.get("状态")); src = cell(f.get("来源")); tp = cell(f.get("任务类型"))
         title = cell(f.get("任务标题"))
-        print(f"[{rid}] {no} | {st} | {src} | {tp} | {title}")
+        assignee = cell(f.get("指派给"))
+        line = f"[{rid}] {no} | {st} | {src} | {tp} | {title}"
+        if assignee:
+            line += f" → {assignee}"
+        print(line)
         if status == "已完成" and cell(f.get("结果")):
             print("    结果:", cell(f.get("结果"))[:500])
 
 
-def push(typ, title, content, remark=""):
+def push(typ, title, content, remark="", assignee=""):
     if typ not in TYPES:
         print("类型非法，可选:", "/".join(TYPES)); return
     fields = {"任务标题": title, "任务类型": [typ], "任务内容": content,
               "来源": ["本地豆包"], "状态": ["待处理"]}
     if remark:
         fields["备注"] = remark
+    if assignee:
+        fields["指派给"] = assignee
     data = cli(["+record-batch-create", "--base-token", BASE, "--table-id", TABLE,
                 "--json", json.dumps({"create_records": [fields]}, ensure_ascii=False),
                 "--as", "user"])
     rid = (((data or {}).get("data") or {}).get("record_id_list") or ["?"])[0]
-    print("已发任务:", rid)
+    print("已发任务:", rid, f"指派给:{assignee}" if assignee else "")
 
 
 def set_status(rid, status, result=None):
@@ -257,7 +263,10 @@ def main():
     p.add_argument("rest", nargs="*")
     a = p.parse_args()
     if a.action == "push":
-        push(a.rest[0], a.rest[1], a.rest[2], a.rest[3] if len(a.rest) > 3 else "")
+        # push <类型> <标题> <内容> [备注] [指派给]
+        push(a.rest[0], a.rest[1], a.rest[2],
+             a.rest[3] if len(a.rest) > 3 else "",
+             a.rest[4] if len(a.rest) > 4 else "")
     elif a.action == "pending":
         list_by_status("待处理")
     elif a.action == "done":
