@@ -266,6 +266,20 @@ def claim(rid, instance_name):
         return False
     # 认领
     set_status(rid, "处理中")
+    # 回读校验：确认状态真的变成了处理中（防假OK）
+    verify = cli(["+record-get", "--base-token", BASE, "--table-id", TABLE,
+                  "--record-id", rid, "--field-id", "状态",
+                  "--format", "json", "--as", "user"])
+    verified = False
+    if verify and verify.get("ok"):
+        d = verify.get("data", {})
+        rows, cols = d.get("data", []), d.get("fields", [])
+        if rows and cols:
+            fmap = {cols[j]: rows[0][j] for j in range(min(len(cols), len(rows[0])))}
+            verified = cell(fmap.get("状态")) == "处理中"
+    if not verified:
+        print(f"FAIL: 任务{rid}认领后状态未变更，写入可能失败")
+        return False
     chat(rid, f"我是【{instance_name}】，已认领此任务，开始执行", instance_name)
     new_remark = f"{remark}\n认领者: {instance_name}".strip()
     cli(["+record-batch-update", "--base-token", BASE, "--table-id", TABLE,
