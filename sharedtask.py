@@ -11,6 +11,8 @@ sharedtask.py —— 豆包Agent共享任务库（飞书多维表格）命令行
   python sharedtask.py set <record_id> <状态> [结果]       # 改状态/回传结果
   python sharedtask.py chat <record_id> <消息> [发送者]    # 追加对话消息(AI间交流)
   python sharedtask.py view <record_id>                   # 查看任务详情+对话日志
+  python sharedtask.py claim <record_id> <实例名>          # 云电脑认领任务(带实例名区分)
+  python sharedtask.py complete <record_id> <结果> [经验]   # 完成任务+自动回收经验到共享记忆
 类型∈信息调研/内容生产/文件处理/代码开发/数据整理/其他；状态∈待处理/处理中/已完成/已取消
 """
 import sys, io, json, subprocess, argparse
@@ -180,6 +182,27 @@ def complete(rid, result, experience=""):
         print(f"经验回收失败: {e}")
 
 
+def claim(rid, instance_name):
+    """云电脑认领任务：标记处理中+对话日志声明身份+备注记录实例名"""
+    set_status(rid, "处理中")
+    chat(rid, f"我是【{instance_name}】，已认领此任务，开始执行", instance_name)
+    # 备注里记录认领者
+    data = cli(["+record-get", "--base-token", BASE, "--table-id", TABLE,
+                "--record-id", rid, "--format", "json", "--as", "user"])
+    remark = ""
+    if data and data.get("ok"):
+        d = data.get("data", {})
+        rows, cols = d.get("data", []), d.get("fields", [])
+        if rows and cols:
+            fmap = {cols[j]: rows[0][j] for j in range(min(len(cols), len(rows[0])))}
+            remark = cell(fmap.get("备注"))
+    new_remark = f"{remark}\n认领者: {instance_name}".strip()
+    cli(["+record-batch-update", "--base-token", BASE, "--table-id", TABLE,
+         "--json", json.dumps({"update_records": {rid: {"备注": new_remark}}}, ensure_ascii=False),
+         "--as", "user"])
+    print(f"OK: 【{instance_name}】已认领任务 {rid}")
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("action")
@@ -204,6 +227,9 @@ def main():
     elif a.action == "complete":
         # complete <record_id> <结果> [经验]
         complete(a.rest[0], a.rest[1], a.rest[2] if len(a.rest) > 2 else "")
+    elif a.action == "claim":
+        # claim <record_id> <实例名>
+        claim(a.rest[0], a.rest[1])
     else:
         print(__doc__)
 
