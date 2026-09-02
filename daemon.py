@@ -592,8 +592,13 @@ def check_heartbeat():
                                     log(f"  {inst_name}已有待处理自检任务，跳过")
                                     _skip = True
                                     break
+                        else:
+                            # 飞书API故障时保守跳过，避免重复创建
+                            log(f"  {inst_name}去重查询失败(API故障)，保守跳过创建")
+                            _skip = True
                     except Exception as _e3:
-                        log(f"  去重查询异常({_e3})，继续创建")
+                        log(f"  去重查询异常({_e3})，保守跳过创建")
+                        _skip = True
                     if _skip:
                         continue
                     rid = push("其他", f"{inst_name}自检+心跳更新",
