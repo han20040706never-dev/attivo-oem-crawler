@@ -334,8 +334,13 @@ def _cycle():
                 if not assignee or assignee == INSTANCE_NAME:
                     try:
                         pending_file = os.path.join(PROJECT, "_pending_ai_tasks.txt")
-                        with open(pending_file, 'a', encoding='utf-8') as f:
-                            f.write(f"[{datetime.datetime.now().strftime('%m-%d %H:%M')}] {rid} | {typ} | {title}\n")
+                        existing = ""
+                        if os.path.exists(pending_file):
+                            with open(pending_file, 'r', encoding='utf-8') as f:
+                                existing = f.read()
+                        if rid not in existing:
+                            with open(pending_file, 'a', encoding='utf-8') as f:
+                                f.write(f"[{datetime.datetime.now().strftime('%m-%d %H:%M')}] {rid} | {typ} | {title}\n")
                     except OSError:
                         pass
                 continue
