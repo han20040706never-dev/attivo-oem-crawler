@@ -345,9 +345,59 @@ def rate(rid, score, feedback=""):
 
 
 def ask(rid, question, instance_name="云电脑"):
-    """云电脑向本地提问：追加带【待本地回复】标记的消息，bootstrap时自动显示"""
+    """云电脑向本地提问：追加带【待本地回复】标记的消息"""
     chat(rid, f"【待本地回复】{question}", instance_name)
     print(f"OK: 问题已提交，等待本地回复")
+
+
+def reply(rid, answer, sender="本地豆包"):
+    """本地回复云电脑的问题：追加【本地回复】标记"""
+    chat(rid, f"【本地回复】{answer}", sender)
+    print(f"OK: 回复已发送到 {rid}")
+
+
+def list_questions():
+    """扫描所有处理中任务，找出有【待本地回复】但尚无【本地回复】的问题"""
+    data = cli(["+record-list", "--base-token", BASE, "--table-id", TABLE,
+                "--filter-json", json.dumps({"logic": "and", "conditions": [["状态", "==", "处理中"]]}, ensure_ascii=False),
+                "--limit", "50", "--format", "json", "--as", "user"])
+    if not data or not data.get("ok"):
+        print("无处理中任务"); return
+    d = data.get("data", {})
+    rows, cols = d.get("data", []), d.get("fields", [])
+    rids = d.get("record_id_list", [])
+    found = 0
+    for i, row in enumerate(rows):
+        fmap = {cols[j]: row[j] for j in range(min(len(cols), len(row)))}
+        rid = rids[i] if i < len(rids) else ""
+        title = cell(fmap.get("任务标题"))
+        raw = fmap.get("对话日志", "")
+        if isinstance(raw, list):
+            chat_log = "".join(x.get("text", "") for x in raw if isinstance(x, dict))
+        else:
+            chat_log = str(raw or "")
+        if "【待本地回复】" not in chat_log:
+            continue
+        # 检查最后一个待回复之后是否有本地回复
+        last_ask = chat_log.rfind("【待本地回复】")
+        last_reply = chat_log.rfind("【本地回复】")
+        if last_reply > last_ask:
+            continue  # 已回复
+        # 提取问题内容
+        question = chat_log[last_ask:].split("\n")[0].replace("【待本地回复】", "").strip()
+        # 提取提问者
+        asker = ""
+        for line in chat_log[max(0,last_ask-30):last_ask].split("\n"):
+            if "[" in line and "]" in line:
+                asker = line.split("]")[0].strip("[").strip()
+        found += 1
+        print(f"[{rid}] {title}")
+        print(f"  提问者: {asker or '未知'}")
+        print(f"  问题: {question[:200]}")
+        print(f"  回复: python sharedtask.py reply {rid} \"你的回答\"")
+        print()
+    if found == 0:
+        print("无待回复问题")
 
 
 def _push_instances():
@@ -615,6 +665,11 @@ def main():
     elif a.action == "ask":
         # ask <record_id> <问题>
         ask(a.rest[0], " ".join(a.rest[1:]), "云电脑")
+    elif a.action == "reply":
+        # reply <record_id> <回答>
+        reply(a.rest[0], " ".join(a.rest[1:]), "本地豆包")
+    elif a.action == "questions":
+        list_questions()
     elif a.action == "register":
         # register <实例名> [标签1,标签2]
         register(a.rest[0], ",".join(a.rest[1:]) if len(a.rest) > 1 else "")
