@@ -150,11 +150,56 @@ def cmd_healthcheck(args):
     """系统健康自检：任务卡死/记忆冗余/配置/版本/API"""
     run("healthcheck.py", [])
 
+def cmd_odoo(args):
+    """Odoo只读查询: odoo customer <关键词> | odoo product <关键词> | odoo lead <关键词>
+    只查不写，安全。需要config.py里有ODOO配置。
+    """
+    if not args or args[0] not in ("customer", "product", "lead"):
+        print("用法: odoo customer|product|lead <关键词>")
+        return
+    model_map = {"customer": "res.partner", "product": "product.product", "lead": "crm.lead"}
+    model = model_map[args[0]]
+    keyword = " ".join(args[1:]) if len(args) > 1 else ""
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import config
+        from odoo.client import OdooClient
+        client = OdooClient(config.ODOO_URL, config.ODOO_DB, config.ODOO_UID, config.ODOO_PWD)
+        domain = []
+        if keyword:
+            if model == "res.partner":
+                domain = ["|", ("name", "ilike", keyword), ("phone", "ilike", keyword)]
+            elif model == "product.product":
+                domain = ["|", ("name", "ilike", keyword), ("default_code", "ilike", keyword)]
+            elif model == "crm.lead":
+                domain = ["|", ("name", "ilike", keyword), ("contact_name", "ilike", keyword)]
+        domain.append(("user_id", "=", 18))
+        fields = ["name", "phone", "city"] if model == "res.partner" else \
+                 ["name", "default_code", "qty_available"] if model == "product.product" else \
+                 ["name", "contact_name", "phone", "city"]
+        ids = client.search(model, domain, limit=20)
+        if not ids:
+            print("无结果"); return
+        records = client.read(model, ids, fields)
+        print(f"=== {args[0]}查询结果（{len(records)}条） ===")
+        for r in records:
+            name = r.get("name", "")
+            extra = ""
+            if model == "res.partner":
+                extra = f" 电话:{r.get('phone','')} 城市:{r.get('city','')}"
+            elif model == "product.product":
+                extra = f" 编号:{r.get('default_code','')} 库存:{r.get('qty_available','')}"
+            elif model == "crm.lead":
+                extra = f" 联系人:{r.get('contact_name','')} 电话:{r.get('phone','')}"
+            print(f"  [{r['id']}] {name}{extra}")
+    except Exception as e:
+        print(f"Odoo查询失败: {e}")
+
 COMMANDS = {
     "memory": cmd_memory, "task": cmd_task,
     "think": cmd_think, "ai": cmd_ai, "bootstrap": cmd_bootstrap,
     "version": cmd_version, "config-export": cmd_config_export, "config-import": cmd_config_import,
-    "healthcheck": cmd_healthcheck,
+    "healthcheck": cmd_healthcheck, "odoo": cmd_odoo,
 }
 
 if __name__ == "__main__":
