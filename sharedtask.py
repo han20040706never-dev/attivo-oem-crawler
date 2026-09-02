@@ -233,7 +233,7 @@ def complete(rid, result, experience=""):
     except Exception as e:
         print(f"AI经验提取失败({e})，用原始结果")
         structured = result[:500]
-    final_exp = f"任务: {task_content[:100]}\n结果: {result[:300]}\n\n=== AI提取经验 ===\n{structured[:800]}"
+    final_exp = f"来源任务ID: {rid}\n任务: {task_content[:100]}\n结果: {result[:300]}\n\n=== AI提取经验 ===\n{structured[:800]}"
     try:
         import subprocess
         subprocess.run([sys.executable, "shared_mem.py", "push",
@@ -548,7 +548,7 @@ def fail(rid, reason, instance_name="云电脑"):
     # push踩坑经验到共享记忆
     try:
         import subprocess
-        exp = f"任务: {task_content[:100]}\n失败原因: {reason}\n执行者: {instance_name}"
+        exp = f"来源任务ID: {rid}\n任务: {task_content[:100]}\n失败原因: {reason}\n执行者: {instance_name}"
         subprocess.run([sys.executable, "shared_mem.py", "push",
                         f"[任务失败] {title}", "踩坑教训", exp, "脚本"],
                        capture_output=True, text=True, timeout=60, encoding="utf-8", cwd=PROJECT)
