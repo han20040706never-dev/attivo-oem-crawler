@@ -1,37 +1,35 @@
 {
   "instances": {
-    "云电脑 价格监控": {
+    "开发助手": {
       "tags": [
-        "价格监控",
-        "公开信息调研",
-        "数据整理"
+        "代码开发",
+        "bug修复",
+        "脚本优化",
+        "重构"
       ],
       "completed": 0,
       "failed": 0,
-      "last_seen": "2026-09-02T16:25:00"
+      "last_seen": "2026-09-03T00:40:00"
     },
     "云电脑 爬虫脚本": {
       "tags": [
         "爬虫",
-        "数据整理",
-        "配件查询"
+        "配件查询",
+        "数据整理"
       ],
       "completed": 0,
       "failed": 0,
       "last_seen": "2026-09-03T00:36:56.567586"
     },
-    "开发助手": {
+    "云电脑 价格监控": {
       "tags": [
-        "代码开发",
-        "重构",
-        "bug修复",
-        "脚本优化"
+        "价格监控",
+        "数据整理",
+        "公开信息调研"
       ],
       "completed": 0,
       "failed": 0,
-      "active_tasks": 0,
-      "last_seen": ""
+      "last_seen": "2026-09-03T00:30:00"
     }
-  },
-  "_comment": "云电脑实例注册表：instance_name -> {tags: [], completed: 0, failed: 0, last_seen: isoformat}"
+  }
 }
