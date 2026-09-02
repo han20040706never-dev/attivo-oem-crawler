@@ -128,5 +128,27 @@ def main():
     except Exception as e:
         print(f"经验同步失败: {e}")
 
+    # 检查云电脑待回复问题
+    print("\n--- 待回复问题 ---")
+    try:
+        r = subprocess.run([sys.executable, os.path.join(PROJECT, "sharedtask.py"), "questions"],
+                          capture_output=True, text=True, timeout=30, encoding='utf-8')
+        out = r.stdout.strip()
+        if out and "无待回复" not in out:
+            print(out)
+            # 写入通知
+            notifs = load_notifications()
+            notifs.append({
+                "title": "云电脑有待回复问题",
+                "result": out[:300],
+                "status": "待回复",
+                "time": datetime.datetime.now().strftime("%m-%d %H:%M")
+            })
+            save_notifications(notifs[-20:])
+        else:
+            print("无待回复问题")
+    except Exception as e:
+        print(f"问题检查失败: {e}")
+
 if __name__ == "__main__":
     main()
