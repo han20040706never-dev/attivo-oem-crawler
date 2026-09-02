@@ -218,12 +218,15 @@ def complete(rid, result, experience=""):
             title = cell(fmap.get("任务标题"))
             chat_log = cell(fmap.get("对话日志"))
             task_content = cell(fmap.get("任务内容"))
-    # 用免费AI提取结构化经验
-    exp_text = result
+    # 用免费AI提取结构化经验（空结果不提取，避免垃圾经验污染共享记忆）
+    exp_text = result or ""
     if experience:
         exp_text += f"\n\n手动补充经验: {experience}"
     if chat_log:
         exp_text += f"\n\n对话日志:\n{chat_log}"
+    if len(exp_text.strip()) < 20:
+        print("结果过短，跳过经验提取")
+        return
     structured = ""
     try:
         from ai_router import extract
