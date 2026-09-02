@@ -6,24 +6,16 @@ healthcheck.py — 协作系统健康自检
 """
 import sys, io, os, json, subprocess, datetime
 sys.stdout = io.TextIOWrapper(sys.stdout.detach(), encoding='utf-8')
+PROJECT = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, PROJECT)
+from common import cli, cell
+sys.stdout = io.TextIOWrapper(sys.stdout.detach(), encoding='utf-8')
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 BASE = "MYQybnKkZaXY2Yswagyc7pKNnRf"
 TASK_TABLE = "tblGwGpuGna0zGQG"
 MEM_TABLE = "tbl2oncwMgoSEUl4"
 REPO = "han20040706never-dev/attivo-oem-crawler"
-
-def cli(args):
-    try:
-        r = subprocess.run(["lark-cli", "base"] + args, capture_output=True,
-                           text=True, encoding="utf-8", errors="replace", timeout=30)
-        return json.loads(r.stdout) if r.stdout.strip() else {}
-    except Exception as e:
-        return {"ok": False, "error": str(e)}
-
-def cell(v):
-    if isinstance(v, list): return v[0] if v else ""
-    return str(v) if v else ""
 
 def check_tasks():
     """检查任务：卡死、无认领者、长期待处理"""
