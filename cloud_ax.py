@@ -103,10 +103,38 @@ def cmd_version(args):
     print(f"cloud_ax.py v{VERSION}")
     check_update()
 
+def cmd_config_export(args):
+    """导出config.py为base64，方便复制到云电脑"""
+    import base64
+    cfg = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.py")
+    if not os.path.exists(cfg):
+        print("config.py不存在"); return
+    with open(cfg, 'r', encoding='utf-8') as f:
+        data = f.read()
+    encoded = base64.b64encode(data.encode()).decode()
+    print(f"=== config.py base64 ({len(encoded)}字符) ===")
+    print(encoded)
+    print("\n复制上面全部内容，在云电脑执行: python cloud_ax.py config-import <粘贴>")
+
+def cmd_config_import(args):
+    """从base64导入config.py"""
+    import base64
+    if not args:
+        print("用法: config-import <base64字符串>"); return
+    encoded = args[0]
+    try:
+        data = base64.b64decode(encoded).decode('utf-8')
+        cfg = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.py")
+        with open(cfg, 'w', encoding='utf-8') as f:
+            f.write(data)
+        print(f"OK: config.py已导入 ({len(data)}字符)")
+    except Exception as e:
+        print(f"导入失败: {e}")
+
 COMMANDS = {
     "memory": cmd_memory, "task": cmd_task,
     "think": cmd_think, "ai": cmd_ai, "bootstrap": cmd_bootstrap,
-    "version": cmd_version,
+    "version": cmd_version, "config-export": cmd_config_export, "config-import": cmd_config_import,
 }
 
 if __name__ == "__main__":
