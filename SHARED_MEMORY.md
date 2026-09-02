@@ -41,7 +41,7 @@
 （本地豆包变更偏好/决策后在此追加）
 
 ---
-*最后更新：2026-09-02 21:30*
+*最后更新：2026-09-03 00:03*
 
 
 ## 云电脑使用说明
@@ -50,5 +50,7 @@
 
 
 ## 已完成任务
+
+- [09-03 00:03] [云电脑 爬虫脚本自检+心跳更新] {'reusable_experience': None, 'pitfalls': None, 'reusable_code_script_name': ['daemon.py', 'sharedtask.py', 'shared_mem.py', 'config.py'], 'output_data_file_path': '/sandboxdata/workspace/file/attivo-collab/oemkb.db'}
 
 - [09-02 21:30] [云电脑自检反馈：daemon保活+密钥+git冲突] 已处理：1.daemon保活已改5分钟计划任务(install_daemon_task.py) 2.oemkb.db已加入.gitignore并从仓库删除 3.sharedtask.py判空已修复且在auto_update列表 4.待用户操作：config.py密钥需同步到云电脑(config-export→config-import)
