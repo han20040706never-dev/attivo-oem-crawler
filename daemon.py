@@ -535,7 +535,13 @@ def check_heartbeat():
                                 break
                     if not has_selfcheck:
                         rid = push("其他", f"{inst_name}自检+心跳更新",
-                                   f"云电脑实例【{inst_name}】心跳超时，请执行：1.更新last_seen到instances.json并push 2.报告daemon运行状态 3.报告代码版本。这是自动唤醒任务，daemon应自动执行。",
+                                   f"云电脑实例【{inst_name}】心跳超时。请执行：\n"
+                                   f"1. cd C:\\attivo-collab\n"
+                                   f"2. python daemon.py --instance \"{inst_name}\" --tags \"标签\" --interval 300（后台启动）\n"
+                                   f"   或 python install_daemon_task.py --instance \"{inst_name}\" --tags \"标签\" --interval 300（注册计划任务保活）\n"
+                                   f"3. 确认config.py存在且密钥正确\n"
+                                   f"4. 运行 python sharedtask.py complete <此任务ID> \"自检完成，daemon已启动\" \n"
+                                   f"这是自动唤醒任务，daemon运行时会auto_selfcheck自动执行。",
                                    "本地豆包(自动唤醒)", inst_name, "高")
                         log(f"  已发自检任务唤醒{inst_name}: {rid}")
             except Exception as e2:
