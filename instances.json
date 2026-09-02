@@ -1,6 +1,6 @@
 {
   "instances": {
-    "云电脑": {
+    "云电脑 价格监控": {
       "tags": [
         "价格监控",
         "公开信息调研",
@@ -8,7 +8,7 @@
       ],
       "completed": 0,
       "failed": 0,
-      "last_seen": "2026-09-02T16:22:48.879974"
+      "last_seen": "2026-09-02T16:25:33.735272"
     }
   },
   "_comment": "云电脑实例注册表：instance_name -> {tags: [], completed: 0, failed: 0, last_seen: isoformat}"
