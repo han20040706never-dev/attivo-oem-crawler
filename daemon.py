@@ -43,17 +43,34 @@ def get_pending_tasks():
             tasks.append((m.group(1), m.group(4).strip(), m.group(3), ""))
     return tasks
 
+def load_instance_stats():
+    """加载instances.json获取各实例历史完成率"""
+    try:
+        with open(os.path.join(PROJECT, "instances.json"), 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        return data.get("instances", {})
+    except:
+        return {}
+
 def task_matches_tags(task_type, title, tags):
-    """判断任务是否匹配本机标签"""
+    """判断任务是否匹配本机标签（带历史完成率加权）"""
     if not tags:
         return True
     tag_list = [t.strip() for t in tags.split(",") if t.strip()]
     text = f"{task_type} {title}"
+    score = 0
     for tag in tag_list:
         if tag in text or tag in task_type:
-            return True
-    # 如果任务指派给了本机，直接匹配
-    return False
+            score += 10
+    # 历史完成率加成
+    stats = load_instance_stats()
+    inst = stats.get(INSTANCE_NAME, {})
+    completed = inst.get("completed", 0)
+    failed = inst.get("failed", 0)
+    if completed + failed > 0:
+        rate = completed / (completed + failed)
+        score += int(rate * 5)
+    return score >= 10
 
 def auto_execute_crawl(rid, title, content):
     """自动执行爬虫任务"""
@@ -121,6 +138,10 @@ def try_auto_execute(rid, title, task_type, content):
 def cycle():
     log("=== 巡检开始 ===")
     
+    # 0. 双向同步经验（pull新经验 + push本地新经验）
+    sync_out = run(["shared_mem.py", "sync"], timeout=60)
+    log(f"经验同步: {sync_out[:150]}")
+    
     # 1. 自动认领匹配标签的任务
     if INSTANCE_NAME:
         tasks = get_pending_tasks()
@@ -167,6 +188,10 @@ def main():
         log(f"daemon启动，实例={INSTANCE_NAME}, 标签={INSTANCE_TAGS}, 间隔{a.interval}秒")
     else:
         log(f"daemon启动（仅回收模式，不自动认领）, 间隔{a.interval}秒")
+    
+    # 启动时自动bootstrap：拉取所有历史经验（教学相长）
+    boot_out = run(["shared_mem.py", "bootstrap"], timeout=120)
+    log(f"启动经验同步: {boot_out[:200]}")
     
     if a.once:
         cycle()
