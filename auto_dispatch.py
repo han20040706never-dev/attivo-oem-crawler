@@ -74,12 +74,48 @@ def recommend_instance(task_type, description):
             best_score, best = score, name
     return best, best_score
 
+def _ai_judge(desc, question):
+    """规则不确定时调用免费AI判断（智谱/通义，零成本），返回是/否"""
+    try:
+        sys.path.insert(0, PROJECT)
+        from ai_router import extract
+        result = extract(f"任务描述: {desc}\n问题: {question}\n只回答'是'或'否'", ["判断"], provider=None)
+        if result:
+            return "是" in str(result)
+    except Exception:
+        pass
+    return None
+
 def dispatch(description, title=None, dry_run=False):
     print(f"任务: {description}")
-    if is_confidential(description):
-        print("⚠️  机密，留本地")
-        return None
+    # 机密判断：规则初筛，边界情况用AI确认
+    conf_hits = sum(1 for pat, _ in CONFIDENTIAL if re.search(pat, description, re.I))
+    has_public = any(kw in description for kw in PUBLIC_CONTEXT)
+    threshold = 2 if has_public else 1
+    if conf_hits >= threshold:
+        # 边界情况（刚好等于阈值且有公开上下文）用AI确认
+        if conf_hits == threshold and has_public:
+            ai_result = _ai_judge(description, "这个任务是否包含客户隐私、底价、密钥、录音等不能外传的机密信息？")
+            if ai_result is False:
+                print("AI确认: 无机密，可派发")
+            else:
+                print("⚠️  机密（AI确认），留本地")
+                return None
+        else:
+            print("⚠️  机密，留本地")
+            return None
     task_type = classify(description)
+    # 类型不确定时用AI分类
+    if task_type == "其他":
+        try:
+            sys.path.insert(0, PROJECT)
+            from ai_router import extract
+            ai_type = extract(f"任务: {description}\n从以下类型选一个: 信息调研/内容生产/文件处理/代码开发/数据整理/其他", ["类型"], provider=None)
+            if ai_type and str(ai_type).strip() in ["信息调研", "内容生产", "文件处理", "代码开发", "数据整理"]:
+                task_type = str(ai_type).strip()
+                print(f"AI分类: {task_type}")
+        except Exception:
+            pass
     print(f"类型: {task_type}")
     instance, score = recommend_instance(task_type, description)
     if not instance or score < 10:
