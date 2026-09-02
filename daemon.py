@@ -439,6 +439,7 @@ def _cycle():
     check_heartbeat()
     check_stale_tasks()
     check_token_usage()
+    auto_reply_questions()
     update_state()
     log("=== 巡检结束 ===")
 
@@ -665,7 +666,7 @@ def check_stale_tasks():
         now = time.time()
         # 获取待处理任务列表
         data = cli(["+record-list", "--base-token", BASE, "--table-id", TABLE,
-                    "--filter-json", '{"conjunction":"and","conditions":[{"field_name":"状态","operator":"is","value":["待处理"]}]}',
+                    "--filter-json", '{"logic":"and","conditions":[["状态","==","待处理"]]}',
                     "--limit", "50", "--format", "json", "--as", "user"])
         if not data or not data.get("ok"):
             return
@@ -714,6 +715,74 @@ def check_stale_tasks():
                 json.dump(notifs[-20:], f, ensure_ascii=False, indent=2)
     except Exception as e:
         log(f"任务老化检查失败: {e}")
+
+
+def auto_reply_questions():
+    """扫描云电脑待回复问题，常见问题自动回复解决方案"""
+    try:
+        sys.path.insert(0, PROJECT)
+        from sharedtask import cli, BASE, TABLE, cell, reply
+        FAQ = [
+            (["config", "配置", "密钥", "密码"], "config.py缺失或密钥问题：请在云电脑上运行 `python cloud_ax.py config-import <base64>` 导入配置。base64从本地豆包获取（运行 python cloud_ax.py config-export）。"),
+            (["daemon", "后台", "保活", "计划任务"], "daemon未运行：请运行 `python daemon.py --instance \"实例名\" --tags \"标签\" --interval 300` 后台启动，或 `python install_daemon_task.py --instance \"实例名\" --tags \"标签\"` 注册Windows计划任务每5分钟自动触发。"),
+            (["github", "超时", "连接", "网络", "代理"], "GitHub连接问题：raw.githubusercontent.com常超时，daemon已内置双通道（raw+api.github.com）。如仍失败，请检查代理127.0.0.1:7890是否开启，或手动git pull。"),
+            (["代码", "更新", "版本", "最新"], "代码更新：daemon每30分钟自动检查GitHub更新（auto_update），语法验证后自动替换。如需立即更新，手动运行 `git pull` 或重启daemon。"),
+            (["oemkb", "数据库", "零件", "配件库"], "配件库：oemkb.db在本地（约110万零件），不在GitHub上（已gitignore）。如需同步，从本地复制到云电脑 C:\\attivo-collab\\oemkb.db。"),
+        ]
+        data = cli(["+record-list", "--base-token", BASE, "--table-id", TABLE,
+                    "--filter-json", '{"logic":"and","conditions":[["状态","==","处理中"]]}',
+                    "--limit", "50", "--format", "json", "--as", "user"])
+        if not data or not data.get("ok"):
+            return
+        d = data.get("data", {})
+        rows, cols = d.get("data", []), d.get("fields", [])
+        rids = d.get("record_id_list", [])
+        replied = 0
+        for i, row in enumerate(rows):
+            rid = rids[i] if i < len(rids) else ""
+            if not rid:
+                continue
+            fmap = {cols[j]: row[j] for j in range(min(len(cols), len(row)))}
+            raw = fmap.get("对话日志", "")
+            if isinstance(raw, list):
+                chat_log = "".join(x.get("text", "") for x in raw if isinstance(x, dict))
+            else:
+                chat_log = str(raw or "")
+            if "【待本地回复】" not in chat_log:
+                continue
+            last_ask = chat_log.rfind("【待本地回复】")
+            last_reply = chat_log.rfind("【本地回复】")
+            if last_reply > last_ask:
+                continue
+            question = chat_log[last_ask:].split("\n")[0].replace("【待本地回复】", "").strip()
+            # 匹配FAQ
+            answer = None
+            for keywords, sol in FAQ:
+                if any(kw.lower() in question.lower() for kw in keywords):
+                    answer = sol
+                    break
+            if answer:
+                reply(rid, answer, "本地豆包(自动回复)")
+                log(f"  自动回复问题: {question[:50]}")
+                replied += 1
+            else:
+                # 无法自动回复，写通知提醒人工
+                notif_file = os.path.join(PROJECT, "_notifications.json")
+                notifs = []
+                if os.path.exists(notif_file):
+                    try:
+                        notifs = json.load(open(notif_file, 'r', encoding='utf-8'))
+                    except:
+                        notifs = []
+                import datetime
+                notifs.append({"time": datetime.datetime.now().isoformat(), "type": "question",
+                               "msg": f"云电脑提问待人工回复: {question[:80]} (任务{rid})"})
+                with open(notif_file, 'w', encoding='utf-8') as f:
+                    json.dump(notifs[-20:], f, ensure_ascii=False, indent=2)
+        if replied:
+            log(f"自动回复了{replied}个问题")
+    except Exception as e:
+        log(f"自动回复问题失败: {e}")
 
 
 def check_token_usage():
@@ -815,7 +884,7 @@ def update_state():
         # 最近完成的任务（新对话快速恢复上下文）
         try:
             data = cli(["+record-list", "--base-token", BASE, "--table-id", TABLE,
-                        "--filter-json", '{"conjunction":"and","conditions":[{"field_name":"状态","operator":"is","value":["已完成"]}]}',
+                        "--filter-json", '{"logic":"and","conditions":[["状态","==","已完成"]]}',
                         "--limit", "10", "--format", "json", "--as", "user"])
             if data and data.get("ok"):
                 d = data.get("data", {})
