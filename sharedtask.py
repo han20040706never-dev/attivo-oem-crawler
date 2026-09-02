@@ -237,10 +237,35 @@ def complete(rid, result, experience=""):
         print(f"AI经验提取失败({e})，用原始结果")
         structured = result[:500]
     final_exp = f"来源任务ID: {rid}\n任务: {task_content[:100]}\n结果: {result[:300]}\n\n=== AI提取经验 ===\n{structured[:800]}"
+    # 经验质量评分：低质量不push，防止污染共享记忆
+    def _exp_quality(text):
+        if not text or len(text.strip()) < 30:
+            return 0, "过短"
+        low_quality_signals = ["无", "暂无", "N/A", "n/a", "无经验", "无教训", "无代码", "无文件", "待补充", "略"]
+        meaningful = sum(1 for s in low_quality_signals if s in text)
+        if len(text.strip()) < 80 and meaningful > 0:
+            return 1, "内容空洞"
+        # 有具体代码/脚本名/文件路径 = 高质量
+        has_code = any(k in text for k in [".py", ".sh", "def ", "import ", "脚本", "函数", "代码"])
+        has_detail = any(k in text for k in ["因为", "原因", "解决", "修复", "改为", "注意", "坑"])
+        score = 2
+        if has_code: score += 1
+        if has_detail: score += 1
+        if len(text) > 200: score += 1
+        return min(score, 5), ""
+    qscore, qreason = _exp_quality(structured)
+    if qscore <= 1:
+        print(f"经验质量过低({qscore}:{qreason})，跳过push，仅记录本地")
+        try:
+            with open(os.path.join(PROJECT, "_low_quality_exp.log"), 'a', encoding='utf-8') as f:
+                f.write(f"\n--- {rid} {title} ---\n{structured[:300]}\n")
+        except:
+            pass
+        return
     try:
         import subprocess
         subprocess.run([sys.executable, "shared_mem.py", "push",
-                        f"[任务完成] {title}", "已完成任务", final_exp, "脚本"],
+                        f"[任务完成] {title}", "已完成任务", final_exp + f"\n\n[质量分:{qscore}/5]", "脚本"],
                        capture_output=True, text=True, timeout=60, encoding="utf-8", cwd=PROJECT)
         # 同步到GitHub SHARED_MEMORY.md（双通道收敛，避免relevant只看到旧镜像）
         subprocess.run([sys.executable, "shared_mem.py", "push-github",
