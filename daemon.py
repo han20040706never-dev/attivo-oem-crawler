@@ -449,6 +449,7 @@ def _cycle():
     check_stale_tasks()
     check_token_usage()
     auto_reply_questions()
+    auto_dispatch_pending()
     update_state()
     log("=== 巡检结束 ===")
 
@@ -805,6 +806,62 @@ def auto_reply_questions():
             log(f"自动回复了{replied}个问题")
     except Exception as e:
         log(f"自动回复问题失败: {e}")
+
+
+def auto_dispatch_pending():
+    """自动派发无指派人的待处理任务：用auto_dispatch逻辑判断机密性+推荐实例，智能指派"""
+    try:
+        sys.path.insert(0, PROJECT)
+        from sharedtask import cli, BASE, TABLE, cell
+        from auto_dispatch import is_confidential, classify, recommend_instance
+        # 获取所有待处理任务
+        data = cli(["+record-list", "--base-token", BASE, "--table-id", TABLE,
+                    "--filter-json", '{"logic":"and","conditions":[["状态","==","待处理"]]}',
+                    "--limit", "50", "--format", "json", "--as", "user"])
+        if not data or not data.get("ok"):
+            return
+        d = data.get("data", {})
+        rows, cols = d.get("data", []), d.get("fields", [])
+        rids = d.get("record_id_list", [])
+        dispatched = 0
+        for i, row in enumerate(rows):
+            rid = rids[i] if i < len(rids) else ""
+            if not rid:
+                continue
+            fmap = {cols[j]: row[j] for j in range(min(len(cols), len(row)))}
+            title = cell(fmap.get("任务标题"))
+            content = cell(fmap.get("任务内容"))
+            assignee = cell(fmap.get("指派给"))
+            # 已有指派人的跳过
+            if assignee:
+                continue
+            # 自检任务不自动派发（由check_heartbeat专门创建并指派）
+            if "自检" in title:
+                continue
+            # 机密检查
+            desc = f"{title} {content}"
+            if is_confidential(desc):
+                log(f"  自动派发跳过(机密): {title[:30]}")
+                continue
+            # 分类+推荐
+            task_type = classify(desc)
+            instance, score = recommend_instance(task_type, desc)
+            if not instance or score < 10:
+                log(f"  自动派发跳过(无匹配实例): {title[:30]} type={task_type} score={score}")
+                continue
+            # 指派给推荐实例
+            try:
+                cli(["+record-batch-update", "--base-token", BASE, "--table-id", TABLE,
+                     "--json", json.dumps({"update_records": {rid: {"指派给": instance}}}, ensure_ascii=False),
+                     "--as", "user"])
+                log(f"  自动派发: {title[:30]} -> {instance} (type={task_type}, score={score})")
+                dispatched += 1
+            except Exception as e:
+                log(f"  自动派发失败 {title[:30]}: {e}")
+        if dispatched:
+            log(f"自动派发了{dispatched}个任务")
+    except Exception as e:
+        log(f"自动派发失败: {e}")
 
 
 def check_token_usage():
