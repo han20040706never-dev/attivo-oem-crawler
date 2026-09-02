@@ -20,7 +20,7 @@
       "tags": "代码开发,重构,bug修复,脚本优化",
       "completed": 0,
       "failed": 0,
-      "last_seen": "2026-09-03T00:40:03.136090"
+      "last_seen": "2026-09-03T00:45:17.306306"
     }
   },
   "_comment": "云电脑实例注册表：instance_name -> {tags: [], completed: 0, failed: 0, last_seen: isoformat}"
