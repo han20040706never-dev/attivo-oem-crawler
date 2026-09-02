@@ -70,6 +70,10 @@ def recommend_instance(task_type, description):
         failed = inst.get("failed", 0)
         if completed + failed > 0:
             score += int(completed / (completed + failed) * 5)
+        # 负载因子：处理中任务多的实例降权（每个减5分）
+        active = inst.get("active_tasks", 0)
+        if active > 0:
+            score -= active * 5
         if score > best_score:
             best_score, best = score, name
     return best, best_score
