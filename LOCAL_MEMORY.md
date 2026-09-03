@@ -316,3 +316,9 @@
 
 
 - **待办(D分片)**：三台并发写 instances.json 互相覆盖，方案=每台只写 instances_<名>.json 分片+health聚合，已派开发助手做 instances_shard.py(recvu8JjMFvCyd)，产出后本地审核py_compile再集成进 daemon/health。
+
+
+## 09-03 16:05 关键bug: common.run()自动加sys.executable,daemon调用方又手动加PY导致python3 python3
+- common.py run()固定 [sys.executable]+cmd_args;daemon auto_execute_code_dev里 cmd=[PY,...] 再传给run,实际执行 python3 python3 ds_harness.py,报ELF null bytes错误。这解释了之前所有云电脑自动代码任务失败。
+- 修复:daemon里所有run([PY,...])去掉PY,直接run(["ds_harness.py",...])等,共5处已推送。
+- 教训:调用common.run前确认它是否已自动加解释器;subprocess报ELF/null bytes先查是不是把解释器当脚本传了。
