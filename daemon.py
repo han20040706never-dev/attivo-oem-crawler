@@ -1158,6 +1158,7 @@ def main():
         return
     while True:
         try:
+            auto_update()  # 每轮巡检检查更新（内部30分钟节流，有更新自动重启）
             cycle()
         except Exception as e:
             log(f"巡检异常: {e}")
