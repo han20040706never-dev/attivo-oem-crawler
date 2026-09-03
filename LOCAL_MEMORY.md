@@ -305,3 +305,11 @@
 - 新增3个重构任务派发开发助手：boatsnet+shop继承基类、yamamotor系列继承基类、9脚本消除common重复函数
 - ax.py统一入口36命令完整；probe_*/parse_suzuki_pdf为一次性脚本不强制继承基类
 - 深度自检发现shared_mem记忆重复(自检任务完成记录xN)，待daemon去重优化
+
+## 09-03 14:30 daemon保活任务三连bug修复
+- bug9: auto_execute_sysops用requests但顶部没全局import,三台保活任务全报 name 'requests' is not defined -> 顶部全局import requests
+- bug10: auto_update重启用Windows CREATE_NEW_PROCESS_GROUP,Linux无效新进程随父退出被杀 -> Linux改用start_new_session=True
+- bug11: 保活脚本pkill daemon.py会杀正在执行的daemon自己 -> 改异步执行subprocess.Popen+sleep3先写结果
+- bug12: 旧版本daemon在auto_update更新前认领保活任务自杀 -> auto_execute_sysops开头保活前force更新
+- bug13: update_heartbeat把tags写成单字列表 -> 内置BUILTIN标签映射兜底写入
+- 教训: 新增函数用第三方库必须确认顶部全局import; Linux/Windows进程参数必须区分
