@@ -29,16 +29,21 @@ mkdir -p "$DIR"; cd "$DIR" || { echo "FAIL 无法进入 $DIR"; exit 1; }
 
 # 1) daemon 在跑时，仅当【空闲】才重启，避免打断正在执行的任务（最长5分钟）
 if pgrep -f "daemon.py" >/dev/null 2>&1; then
-    BUSY=0
-    if [ -f /tmp/daemon.log ]; then
-        # 日志180秒内有更新 且 尾部出现任务执行痕迹 => 忙碌
-        LOG_AGE=$(( $(date +%s) - $(stat -c %Y /tmp/daemon.log 2>/dev/null || echo 0) ))
-        if [ "$LOG_AGE" -lt 180 ] && tail -25 /tmp/daemon.log 2>/dev/null | grep -qE "自动认领|自动执行|执行中|代码开发|DeepSeek"; then
-            BUSY=1
-        fi
-    fi
-    if [ "$BUSY" -eq 1 ]; then
-        echo "daemon 正在执行任务（日志180秒内活跃），跳过本次刷新，下轮再换token"
+    # 读 daemon 维护的原子忙碌状态文件 _busy.json（busy=True且5分钟内才算忙）
+    BUSY=$(python3 -c "
+import json,datetime,sys
+try:
+    s=json.load(open('$DIR/_busy.json'))
+    if s.get('busy'):
+        t=datetime.datetime.fromisoformat(s.get('since',''))
+        if datetime.datetime.now()-t < datetime.timedelta(minutes=5):
+            print('1'); sys.exit()
+    print('0')
+except Exception:
+    print('0')
+" 2>/dev/null)
+    if [ "$BUSY" = "1" ]; then
+        echo "daemon 正在执行任务(_busy.json)，跳过本次刷新，下轮再换token"
         exit 0
     fi
     echo "daemon 空闲，杀掉旧进程(旧token)准备重启..."
