@@ -1,20 +1,21 @@
 #!/bin/bash
 # ============================================================
-# Linux 终极保活：三层防护，一次执行永久生效
+# Linux 终极保活：三层防护，一次执行永久生效（三台云电脑通用）
 # 层1: ~/.bashrc + ~/.profile 自启（容器回收后新开shell自动恢复）
 # 层2: supervisord 进程保活（daemon崩溃秒级重启）
-# 层3: watchdog循环脚本（supervisord也挂了的兜底）
-# 用法: curl -s https://raw.githubusercontent.com/han20040706never-dev/attivo-oem-crawler/main/linux_keepalive_ultimate.sh | bash
+# 层3: watchdog循环脚本（60秒兜底检查）
+# 用法:
+#   开发助手:  bash linux_keepalive_ultimate.sh "开发助手" "代码开发,重构,bug修复,脚本优化"
+#   价格监控:  bash linux_keepalive_ultimate.sh "云电脑 价格监控" "价格监控,公开信息调研,数据整理"
+#   爬虫脚本:  bash linux_keepalive_ultimate.sh "云电脑 爬虫脚本" "爬虫,数据整理,配件查询"
 # ============================================================
 
-set -e
+INSTANCE="${1:-开发助手}"
+TAGS="${2:-代码开发,重构,bug修复,脚本优化}"
 COLLAB_DIR="$HOME/attivo-collab"
-INSTANCE="开发助手"
-TAGS="代码开发,重构,bug修复,脚本优化"
 
-echo "=== Linux终极保活配置 ==="
+echo "=== Linux终极保活: $INSTANCE ==="
 
-# 确保目录存在
 mkdir -p "$COLLAB_DIR"
 cd "$COLLAB_DIR"
 
@@ -36,44 +37,43 @@ print('   代码拉取完成')
 
 # ---------- 层1: bashrc/profile 自启 ----------
 echo "2. 配置bashrc/profile自动启动..."
-AUTOSTART_MARKER="# attivo-daemon-autostart"
-AUTOSTART_BLOCK=$(cat <<'BLOCK'
-
-# attivo-daemon-autostart
-if ! pgrep -f "daemon.py" > /dev/null 2>&1; then
-    cd ~/attivo-collab 2>/dev/null && nohup python3 daemon.py --instance "开发助手" --tags "代码开发,重构,bug修复,脚本优化" --interval 300 > /tmp/daemon.log 2>&1 &
-fi
-# attivo-daemon-autostart-end
-BLOCK
-)
-
+MARKER="# attivo-daemon-autostart"
+# 先清除旧的自启块，再写入新的（带正确实例名）
 for rcfile in "$HOME/.bashrc" "$HOME/.profile"; do
     touch "$rcfile"
-    if ! grep -q "$AUTOSTART_MARKER" "$rcfile"; then
-        echo "$AUTOSTART_BLOCK" >> "$rcfile"
-        echo "   $rcfile 已添加自启"
-    else
-        # 替换旧的自启块
-        python3 -c "
-import re
-with open('$rcfile','r') as f: c = f.read()
-c = re.sub(r'# attivo-daemon-autostart.*?# attivo-daemon-autostart-end', '''$AUTOSTART_BLOCK''', c, flags=re.DOTALL)
-with open('$rcfile','w') as f: f.write(c)
-"
-        echo "   $rcfile 自启已更新"
-    fi
+    python3 - "$rcfile" "$INSTANCE" "$TAGS" <<'PYEOF'
+import sys, re
+rcfile, instance, tags = sys.argv[1], sys.argv[2], sys.argv[3]
+with open(rcfile, 'r') as f:
+    content = f.read()
+# 删除旧块
+content = re.sub(r'\n?# attivo-daemon-autostart.*?# attivo-daemon-autostart-end\n?', '\n', content, flags=re.DOTALL)
+# 写入新块
+block = f"""
+# attivo-daemon-autostart
+if ! pgrep -f "daemon.py" > /dev/null 2>&1; then
+    cd ~/attivo-collab 2>/dev/null && nohup python3 daemon.py --instance "{instance}" --tags "{tags}" --interval 300 > /tmp/daemon.log 2>&1 &
+fi
+# attivo-daemon-autostart-end
+"""
+content = content.rstrip() + "\n" + block
+with open(rcfile, 'w') as f:
+    f.write(content)
+print(f"   {rcfile} 已配置")
+PYEOF
 done
 
 # ---------- 层3: watchdog循环脚本 ----------
 echo "3. 创建watchdog循环脚本..."
-cat > "$COLLAB_DIR/watchdog_loop.sh" <<'WDL'
-#!/bin/bash
+python3 - "$COLLAB_DIR/watchdog_loop.sh" "$INSTANCE" "$TAGS" <<'PYEOF'
+import sys
+path, instance, tags = sys.argv[1], sys.argv[2], sys.argv[3]
+script = f'''#!/bin/bash
 # 兜底watchdog：每60秒检查daemon，不在就启动
 COLLAB=~/attivo-collab
 while true; do
     if ! pgrep -f "daemon.py" > /dev/null 2>&1; then
         cd "$COLLAB"
-        # 拉最新daemon.py
         python3 -c "
 import requests
 try:
@@ -81,18 +81,19 @@ try:
     if r.status_code == 200: open('daemon.py','wb').write(r.content)
 except: pass
 "
-        nohup python3 daemon.py --instance "开发助手" --tags "代码开发,重构,bug修复,脚本优化" --interval 300 > /tmp/daemon.log 2>&1 &
+        nohup python3 daemon.py --instance "{instance}" --tags "{tags}" --interval 300 > /tmp/daemon.log 2>&1 &
         echo "$(date) daemon重启" >> /tmp/watchdog.log
     fi
     sleep 60
 done
-WDL
+'''
+with open(path, 'w') as f:
+    f.write(script)
+PYEOF
 chmod +x "$COLLAB_DIR/watchdog_loop.sh"
 
-# 杀掉旧watchdog，启动新的
 pkill -f "watchdog_loop.sh" 2>/dev/null || true
 sleep 1
-# 用setsid确保watchdog不受终端退出影响
 setsid nohup bash "$COLLAB_DIR/watchdog_loop.sh" > /tmp/watchdog_loop.log 2>&1 &
 echo "   watchdog循环已启动 (PID $!)"
 
@@ -109,18 +110,14 @@ stdout_logfile=/tmp/daemon_sup.log
 stderr_logfile=/tmp/daemon_sup_err.log
 SUP
 
-# 杀掉旧daemon和supervisord
 pkill -f "daemon.py" 2>/dev/null || true
 supervisorctl shutdown 2>/dev/null || true
 sleep 3
 
-# 启动supervisord（如果可用）
 if command -v supervisord &> /dev/null; then
     setsid supervisord -c "$COLLAB_DIR/supervisord.conf" 2>/dev/null || true
     echo "   supervisord已启动"
 else
-    # 没有supervisord，直接启动daemon（watchdog会保活）
-    cd "$COLLAB_DIR"
     setsid nohup python3 daemon.py --instance "$INSTANCE" --tags "$TAGS" --interval 300 > /tmp/daemon.log 2>&1 &
     echo "   无supervisord，直接启动daemon (watchdog保活)"
 fi
@@ -130,22 +127,14 @@ sleep 3
 # ---------- 验证 ----------
 echo "5. 验证..."
 if pgrep -f "daemon.py" > /dev/null; then
-    echo "   ✅ daemon运行中 (PID $(pgrep -f daemon.py | head -1))"
+    echo "   OK daemon运行中 (PID $(pgrep -f daemon.py | head -1))"
 else
-    echo "   ❌ daemon未启动，查看日志:"
+    echo "   FAIL daemon未启动，日志:"
     tail -10 /tmp/daemon.log 2>/dev/null || tail -10 /tmp/daemon_sup_err.log 2>/dev/null
 fi
-
 if pgrep -f "watchdog_loop.sh" > /dev/null; then
-    echo "   ✅ watchdog运行中 (PID $(pgrep -f watchdog_loop | head -1))"
+    echo "   OK watchdog运行中 (PID $(pgrep -f watchdog_loop | head -1))"
 fi
 
 echo ""
-echo "=== 三层保活配置完成 ==="
-echo "层1: bashrc/profile自启（新shell自动恢复）"
-echo "层2: supervisord进程保活（崩溃秒级重启）"
-echo "层3: watchdog循环兜底（60秒检查）"
-echo ""
-echo "建议再让云电脑豆包创建一个平台定时任务，每5分钟运行:"
-echo "  bash ~/attivo-collab/watchdog_loop.sh"
-echo "这样容器回收后平台定时任务会触发bashrc自启+watchdog，彻底免手动。"
+echo "=== 保活配置完成: $INSTANCE ==="
