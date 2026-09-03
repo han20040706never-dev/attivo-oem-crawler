@@ -445,18 +445,18 @@ def should_auto_sysops(title, task_type):
     return any(k in title for k in ["保活配置", "部署保活", "环境配置", "配置保活", "keepalive"])
 
 def auto_execute_sysops(rid, title, content):
-    """自动执行系统运维任务：只允许白名单操作（下载执行保活脚本等）"""
+    """自动执行系统运维任务：只允许白名单操作（保活配置等）。云电脑均为Linux。"""
     log(f"  自动执行系统运维: {title}")
     try:
-        import platform
-        is_windows = platform.system() == "Windows"
-        outputs = []
-
-        # 白名单：Linux终极保活
-        if "linux" in content.lower() or "终极保活" in content or "keepalive_ultimate" in content:
-            if is_windows:
-                return "ERROR: Linux保活脚本不能在Windows执行"
-            # 下载并执行linux_keepalive_ultimate.sh
+        # 保活配置类任务（三台云电脑都是Linux Ubuntu）
+        if "保活" in title or "keepalive" in title.lower() or "keepalive" in content.lower():
+            # 实例名优先用本实例名，也可从内容解析
+            inst_name = INSTANCE_NAME or "开发助手"
+            inst_tags = INSTANCE_TAGS or "代码开发,重构,bug修复,脚本优化"
+            m = re.search(r'实例[名:：]\s*([^\s,，]+(?:\s[^\s,，]+)?)', content)
+            if m:
+                inst_name = m.group(1).strip()
+            # 下载保活脚本
             script_path = os.path.join(PROJECT, "_setup_keepalive.sh")
             r = requests.get(GITHUB_RAW + "linux_keepalive_ultimate.sh", timeout=30)
             if r.status_code != 200:
@@ -464,37 +464,15 @@ def auto_execute_sysops(rid, title, content):
             with open(script_path, 'wb') as f:
                 f.write(r.content)
             os.chmod(script_path, 0o755)
-            r2 = subprocess.run(["bash", script_path], capture_output=True, text=True, timeout=120, cwd=PROJECT)
-            outputs.append(f"Linux保活配置:\n{r2.stdout[-500:]}\n{r2.stderr[-200:]}")
-
-        # 白名单：Windows保活
-        elif "windows" in content.lower() or "fix_restart.ps1" in content:
-            if not is_windows:
-                return "ERROR: Windows保活脚本不能在Linux执行"
-            ps_cmd = "iwr https://raw.githubusercontent.com/han20040706never-dev/attivo-oem-crawler/main/fix_restart.ps1 -UseBasicParsing | iex"
-            r2 = subprocess.run(["powershell", "-c", ps_cmd], capture_output=True, text=True, timeout=120, cwd=PROJECT)
-            outputs.append(f"Windows保活配置:\n{r2.stdout[-500:]}\n{r2.stderr[-200:]}")
-
-        # 白名单：通用保活（自动判断平台）
-        elif "保活" in title or "keepalive" in title.lower():
-            if is_windows:
-                ps_cmd = "iwr https://raw.githubusercontent.com/han20040706never-dev/attivo-oem-crawler/main/fix_restart.ps1 -UseBasicParsing | iex"
-                r2 = subprocess.run(["powershell", "-c", ps_cmd], capture_output=True, text=True, timeout=120, cwd=PROJECT)
-            else:
-                script_path = os.path.join(PROJECT, "_setup_keepalive.sh")
-                r = requests.get(GITHUB_RAW + "linux_keepalive_ultimate.sh", timeout=30)
-                if r.status_code != 200:
-                    return f"ERROR: 下载保活脚本失败 HTTP {r.status_code}"
-                with open(script_path, 'wb') as f:
-                    f.write(r.content)
-                os.chmod(script_path, 0o755)
-                r2 = subprocess.run(["bash", script_path], capture_output=True, text=True, timeout=120, cwd=PROJECT)
-            outputs.append(f"保活配置:\n{r2.stdout[-500:]}\n{r2.stderr[-200:]}")
-
+            update_heartbeat()
+            r2 = subprocess.run(["bash", script_path, inst_name, inst_tags],
+                                capture_output=True, text=True, timeout=180, cwd=PROJECT)
+            update_heartbeat()
+            out = (r2.stdout or "")[-600:]
+            err = (r2.stderr or "")[-200:]
+            return f"系统运维完成: 保活配置({inst_name})\n{out}\n{err}"
         else:
             return f"ERROR: 未识别的运维操作，只允许保活配置类任务。content: {content[:200]}"
-
-        return "系统运维完成: " + "\n".join(outputs)
     except Exception as e:
         return f"ERROR: 系统运维异常 {e}"
 
