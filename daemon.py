@@ -41,6 +41,25 @@ _LOCK_FILE = os.path.join(PROJECT, ".daemon.lock")
 RID_RE = re.compile(r'^rec[A-Za-z0-9]{6,}$')
 CRAWL_MARKERS = ("剩余", "收尾", "OEM", "oem", "section", "零件抓取", "_remaining_sections")
 
+# 连续lark token失效计数（连续3轮失效则自杀，等平台定时任务refresh_daemon用新token拉起）
+_LARK_FAIL_STREAK = 0
+
+def _set_busy(busy, task_title=""):
+    """原子写入忙碌状态文件，供 refresh_daemon.sh 判断是否可安全重启换token"""
+    try:
+        import datetime
+        sf = os.path.join(PROJECT, "_busy.json")
+        if busy:
+            data = {"busy": True, "since": datetime.datetime.now().isoformat(), "task": task_title[:60]}
+        else:
+            data = {"busy": False, "since": datetime.datetime.now().isoformat(), "task": ""}
+        tmp = sf + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False)
+        os.replace(tmp, sf)
+    except Exception:
+        pass
+
 TAG_KEYWORDS = {
     "爬虫": ["爬", "爬虫", "crawl", "抓取", "采集", "scrape"],
     "价格监控": ["价格", "监控", "比价", "行情", "多少钱", "售价"],
@@ -200,7 +219,14 @@ def task_matches_tags(task_type, title, tags):
     return score >= 10
 
 def get_pending_tasks(max_tasks=20):
+    global _LARK_FAIL_STREAK
     out = run(["sharedtask.py", "pending"], timeout=30)
+    # 识别lark user token失效（区别于"真的没有待处理任务"）
+    if out and ("token_invalid" in out or "LARK_ERR" in out or "99991668" in out):
+        _LARK_FAIL_STREAK += 1
+        log(f"  lark调用失效(连续{_LARK_FAIL_STREAK}轮): {out[:120]}")
+    elif out is not None and not out.startswith("ERROR"):
+        _LARK_FAIL_STREAK = 0
     if not out or out.startswith("ERROR"):
         if out:
             log(f"  pending查询失败: {out[:200]}")
@@ -551,7 +577,13 @@ def _cycle():
     if INSTANCE_NAME and not INSTANCE_TAGS:
         log("  未配置标签，跳过自动认领（防全量抢单）")
     elif INSTANCE_NAME:
-        for rid, title, typ, content, assignee in get_pending_tasks():
+        # 连续3轮lark token失效 -> 主动退出，等平台定时任务refresh_daemon用新token拉起
+        if _LARK_FAIL_STREAK >= 3:
+            log("  连续3轮lark token失效，主动退出，等待refresh用新token重启")
+            _set_busy(False)
+            os._exit(0)
+        pending_tasks = get_pending_tasks()
+        for rid, title, typ, content, assignee in pending_tasks:
             if assignee and assignee != INSTANCE_NAME:
                 log(f"  跳过(指派给{assignee}): {title}")
                 continue
@@ -580,9 +612,11 @@ def _cycle():
             if "OK" not in claim_out or claim_out.startswith("ERROR"):
                 log(f"  认领失败: {claim_out[:120]}")
                 continue
+            _set_busy(True, title)  # 标记忙碌，refresh_daemon 此时不会杀进程换token
             ver = run(["sharedtask.py", "view", rid], timeout=20)
             if "处理中" not in ver:
                 log(f"  认领校验失败: {ver[:120]}")
+                _set_busy(False)
                 continue
             try:
                 result = try_auto_execute(rid, title, typ, content)
@@ -590,6 +624,7 @@ def _cycle():
                 # 单任务异常不能崩溃整个巡检循环，上报失败后继续下一个
                 result = f"ERROR: 执行异常 {_e}"
                 log(f"  任务执行异常: {title} -> {_e}")
+            _set_busy(False)  # 任务结束清除忙碌
             if result is None:
                 log(f"  需AI处理: {title}")
                 continue
