@@ -8,10 +8,16 @@
 # ============================================================
 
 INSTANCE="${1:-开发助手}"
-COLLAB_DIR="$HOME/attivo-collab"
+# 自动探测真实部署目录（脚本所在目录优先，兼容云电脑长路径，最后才用$HOME）
+SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+COLLAB_DIR=""
+for d in "$SELF_DIR" "$HOME/.super_doubao/super-doubao-runtime/workspace/attivo-collab" "$HOME/attivo-collab"; do
+  [ -f "$d/daemon.py" ] && COLLAB_DIR="$d" && break
+done
+[ -z "$COLLAB_DIR" ] && COLLAB_DIR="$SELF_DIR"
 RAW="https://raw.githubusercontent.com/han20040706never-dev/attivo-oem-crawler/main"
 
-echo "=== 保活配置 v2: $INSTANCE ==="
+echo "=== 保活配置 v2: $INSTANCE (目录:$COLLAB_DIR) ==="
 mkdir -p "$COLLAB_DIR"
 cd "$COLLAB_DIR" || exit 1
 
@@ -35,15 +41,15 @@ echo "2. 配置 bashrc/profile 自启..."
 MARKER="# attivo-daemon-autostart"
 for rcfile in "$HOME/.bashrc" "$HOME/.profile"; do
     touch "$rcfile"
-    python3 - "$rcfile" "$INSTANCE" <<'PYEOF'
+    python3 - "$rcfile" "$INSTANCE" "$COLLAB_DIR" <<'PYEOF'
 import sys, re
-rcfile, instance = sys.argv[1], sys.argv[2]
+rcfile, instance, collab = sys.argv[1], sys.argv[2], sys.argv[3]
 with open(rcfile) as f: content = f.read()
 content = re.sub(r'\n?# attivo-daemon-autostart.*?# attivo-daemon-autostart-end\n?', '\n', content, flags=re.DOTALL)
 block = f"""
 # attivo-daemon-autostart
 if ! pgrep -f "daemon.py" >/dev/null 2>&1; then
-    cd ~/attivo-collab 2>/dev/null && bash self_heal.sh "{instance}" >/tmp/self_heal.log 2>&1 &
+    cd "{collab}" 2>/dev/null && bash self_heal.sh "{instance}" >/tmp/self_heal.log 2>&1 &
 fi
 # attivo-daemon-autostart-end
 """
@@ -54,11 +60,11 @@ done
 
 # ---------- 3. watchdog 每60秒兜底（调用 self_heal.sh，幂等） ----------
 echo "3. 启动 watchdog..."
-cat > "$COLLAB_DIR/watchdog_loop.sh" <<'WDEOF'
+cat > "$COLLAB_DIR/watchdog_loop.sh" <<WDEOF
 #!/bin/bash
 # 兜底 watchdog：每60秒调用 self_heal.sh（幂等，daemon 在就跳过）
 while true; do
-    bash ~/attivo-collab/self_heal.sh "$1" >>/tmp/watchdog.log 2>&1
+    bash "$COLLAB_DIR/self_heal.sh" "\$1" >>/tmp/watchdog.log 2>&1
     sleep 60
 done
 WDEOF
