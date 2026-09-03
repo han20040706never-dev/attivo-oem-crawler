@@ -33,6 +33,8 @@ AI类（不占豆包token）:
   setphone <ID> <手机号> | --cards cards.json    - 补线索/商机+联系人手机号(默认预览,--apply写入)
   status                                         - 查看系统状态
   agent "任务"                                   - 智能路由（NLP→免费API/代码→dsh agent/业务→豆包）
+  route <任务描述>                               - 智能路由（同agent）
+  dsedit <文件列表> -m <需求> [--apply]          - 用AI编辑文件
 
 所有命令只输出结果，不输出过程。
 """
@@ -490,6 +492,30 @@ def cmd_agent(args):
     except Exception as e:
         print(f"全部失败: {e}")
 
+def cmd_route(args):
+    """智能路由: ax route "任务描述" 自动选执行器（同agent）"""
+    import smart
+    print(smart.decide(' '.join(args)))
+
+def cmd_dsedit(args):
+    """用AI编辑文件: ax dsedit f.py -m 需求 [--apply]"""
+    import smart
+    files = []
+    message = None
+    apply = False
+    i = 0
+    while i < len(args):
+        if args[i] in ("-m", "--message") and i+1 < len(args):
+            message = args[i+1]; i += 2
+        elif args[i] == "--apply":
+            apply = True; i += 1
+        else:
+            files.append(args[i]); i += 1
+    if not files or not message:
+        print("用法: ax dsedit <文件列表> -m <需求> [--apply]")
+        return
+    smart.ds_edit(files, message, apply)
+
 def cmd_ds(args):
     """DeepSeek多轮迭代编码harness: ax ds "任务" [--file a.py] [--iter 3] [--out x.py] [--auto]"""
     if not args:
@@ -582,6 +608,7 @@ COMMANDS = {
     "setphone": cmd_setphone, "cardphone": cmd_cardphone,
     "transcribe": cmd_transcribe, "summarize-rec": cmd_summarize_rec,
     "crossref": cmd_crossref, "clean": cmd_clean, "status": cmd_status, "task": cmd_task, "nophone": cmd_nophone, "oem": cmd_oem, "ds": cmd_ds, "agent": cmd_agent, "memory": cmd_memory, "collab": cmd_collab,
+    "route": cmd_route, "dsedit": cmd_dsedit,
 }
 
 if __name__ == "__main__":
