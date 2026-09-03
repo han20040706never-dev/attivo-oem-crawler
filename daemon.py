@@ -134,10 +134,15 @@ def auto_update(force=False):
                         msvcrt.locking(lf.fileno(), msvcrt.LK_UNLCK, 1)
                         lf.close()
                 except: pass
-                # 启动新进程
-                subprocess.Popen([sys.executable] + sys.argv, cwd=PROJECT,
-                               creationflags=getattr(subprocess, 'CREATE_NEW_PROCESS_GROUP', 0))
+                # 启动新进程（Linux用start_new_session脱离父进程，Windows用CREATE_NEW_PROCESS_GROUP）
+                kwargs = {'cwd': PROJECT, 'close_fds': True}
+                if os.name == 'nt':
+                    kwargs['creationflags'] = getattr(subprocess, 'CREATE_NEW_PROCESS_GROUP', 0)
+                else:
+                    kwargs['start_new_session'] = True
+                subprocess.Popen([sys.executable] + sys.argv, **kwargs)
                 log("  新daemon已启动，当前进程退出")
+                time.sleep(1)
                 os._exit(0)
             except Exception as e:
                 log(f"  自动重启失败: {e}")
