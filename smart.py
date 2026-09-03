@@ -51,9 +51,10 @@ def decide(desc):
 def _match_ax_cmd(desc):
     """匹配本地ax.py命令"""
     mapping = {
+        "通行费": "toll", "高速费": "toll",
         "线索": "newlead", "商机": "opp", "联系人": "customer",
         "报销": "expense", "备注": "note", "价格表": "pricelist",
-        "库存": "stock", "配件": "sync", "客户": "customer"
+        "库存": "stock", "配件": "stock", "客户": "customer"
     }
     for k, v in mapping.items():
         if k in desc:
@@ -62,9 +63,10 @@ def _match_ax_cmd(desc):
 
 # ============ dsedit ============
 def _strip_code_fence(text):
-    """剥离markdown代码围栏"""
-    text = re.sub(r'^\s*$', '', text, flags=re.MULTILINE)
-    return text.strip()
+    """剥离markdown代码围栏;DeepSeek可能拆成多个块,拼接所有代码块"""
+    text = text.strip()
+    blocks = re.findall(r"```(?:[a-zA-Z]+)?\s*(.*?)```", text, re.DOTALL)
+    return "".join(blocks).strip() if blocks else text
 
 def _gen_diff(old, new, filepath):
     """生成unified diff"""
