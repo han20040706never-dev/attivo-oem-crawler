@@ -41,7 +41,7 @@
 （本地豆包变更偏好/决策后在此追加）
 
 ---
-*最后更新：2026-09-03 14:17*
+*最后更新：2026-09-03 14:18*
 
 
 ## 云电脑使用说明
@@ -137,6 +137,10 @@ Python: 3.12.11
 
 
 ## 踩坑教训
+
+- [09-03 14:18] [清理重复健康检查：合并health.py和healthcheck.py] ERROR: DeepSeek生成失败 ERROR(exit 1): File "/opt/python3.12/bin/python3", line 1
+    ELF
+SyntaxError: source code cannot contain null bytes
 
 - [09-03 14:17] [消除9个脚本中重复定义的common函数] ERROR: 无法从标题提取目标文件名: 消除9个脚本中重复定义的common函数
 
