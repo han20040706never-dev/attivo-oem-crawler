@@ -438,11 +438,73 @@ def auto_execute_code_dev(rid, title, content):
     except Exception as e:
         return f"ERROR: 代码开发异常 {e}"
 
+def should_auto_sysops(title, task_type):
+    """系统运维类任务自动执行：保活配置、环境部署、脚本更新"""
+    if task_type == "系统运维":
+        return True
+    return any(k in title for k in ["保活配置", "部署保活", "环境配置", "配置保活", "keepalive"])
+
+def auto_execute_sysops(rid, title, content):
+    """自动执行系统运维任务：只允许白名单操作（下载执行保活脚本等）"""
+    log(f"  自动执行系统运维: {title}")
+    try:
+        import platform
+        is_windows = platform.system() == "Windows"
+        outputs = []
+
+        # 白名单：Linux终极保活
+        if "linux" in content.lower() or "终极保活" in content or "keepalive_ultimate" in content:
+            if is_windows:
+                return "ERROR: Linux保活脚本不能在Windows执行"
+            # 下载并执行linux_keepalive_ultimate.sh
+            script_path = os.path.join(PROJECT, "_setup_keepalive.sh")
+            r = requests.get(GITHUB_RAW + "linux_keepalive_ultimate.sh", timeout=30)
+            if r.status_code != 200:
+                return f"ERROR: 下载保活脚本失败 HTTP {r.status_code}"
+            with open(script_path, 'wb') as f:
+                f.write(r.content)
+            os.chmod(script_path, 0o755)
+            r2 = subprocess.run(["bash", script_path], capture_output=True, text=True, timeout=120, cwd=PROJECT)
+            outputs.append(f"Linux保活配置:\n{r2.stdout[-500:]}\n{r2.stderr[-200:]}")
+
+        # 白名单：Windows保活
+        elif "windows" in content.lower() or "fix_restart.ps1" in content:
+            if not is_windows:
+                return "ERROR: Windows保活脚本不能在Linux执行"
+            ps_cmd = "iwr https://raw.githubusercontent.com/han20040706never-dev/attivo-oem-crawler/main/fix_restart.ps1 -UseBasicParsing | iex"
+            r2 = subprocess.run(["powershell", "-c", ps_cmd], capture_output=True, text=True, timeout=120, cwd=PROJECT)
+            outputs.append(f"Windows保活配置:\n{r2.stdout[-500:]}\n{r2.stderr[-200:]}")
+
+        # 白名单：通用保活（自动判断平台）
+        elif "保活" in title or "keepalive" in title.lower():
+            if is_windows:
+                ps_cmd = "iwr https://raw.githubusercontent.com/han20040706never-dev/attivo-oem-crawler/main/fix_restart.ps1 -UseBasicParsing | iex"
+                r2 = subprocess.run(["powershell", "-c", ps_cmd], capture_output=True, text=True, timeout=120, cwd=PROJECT)
+            else:
+                script_path = os.path.join(PROJECT, "_setup_keepalive.sh")
+                r = requests.get(GITHUB_RAW + "linux_keepalive_ultimate.sh", timeout=30)
+                if r.status_code != 200:
+                    return f"ERROR: 下载保活脚本失败 HTTP {r.status_code}"
+                with open(script_path, 'wb') as f:
+                    f.write(r.content)
+                os.chmod(script_path, 0o755)
+                r2 = subprocess.run(["bash", script_path], capture_output=True, text=True, timeout=120, cwd=PROJECT)
+            outputs.append(f"保活配置:\n{r2.stdout[-500:]}\n{r2.stderr[-200:]}")
+
+        else:
+            return f"ERROR: 未识别的运维操作，只允许保活配置类任务。content: {content[:200]}"
+
+        return "系统运维完成: " + "\n".join(outputs)
+    except Exception as e:
+        return f"ERROR: 系统运维异常 {e}"
+
 def try_auto_execute(rid, title, task_type, content):
     if should_auto_selfcheck(title):
         return auto_selfcheck(rid, title)
     if should_auto_code_dev(title, task_type):
         return auto_execute_code_dev(rid, title, content)
+    if should_auto_sysops(title, task_type):
+        return auto_execute_sysops(rid, title, content)
     if should_auto_execute(title, task_type):
         return auto_execute_crawl(rid, title, content)
     return None
@@ -458,9 +520,11 @@ def _cycle():
             if assignee and assignee != INSTANCE_NAME:
                 log(f"  跳过(指派给{assignee}): {title}")
                 continue
-            if not task_matches_tags(typ, title, INSTANCE_TAGS):
+            if assignee == INSTANCE_NAME:
+                pass  # 明确指派给本实例的任务，跳过标签匹配
+            elif not task_matches_tags(typ, title, INSTANCE_TAGS):
                 continue
-            if not should_auto_execute(title, typ) and not should_auto_selfcheck(title) and not should_auto_code_dev(title, typ):
+            if not should_auto_execute(title, typ) and not should_auto_selfcheck(title) and not should_auto_code_dev(title, typ) and not should_auto_sysops(title, typ):
                 log(f"  非自动任务，留给AI: {title}")
                 # 指派给本实例的非自动任务，写本地待办通知，云电脑AI可读
                 if not assignee or assignee == INSTANCE_NAME:
