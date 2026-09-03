@@ -35,7 +35,7 @@ LOG_FILE = os.path.join(PROJECT, "_daemon.log")
 INSTANCE_NAME = os.environ.get("DAEMON_INSTANCE", "")
 INSTANCE_TAGS = os.environ.get("DAEMON_TAGS", "")
 GITHUB_RAW = "https://raw.githubusercontent.com/han20040706never-dev/attivo-oem-crawler/main/"
-AUTO_UPDATE_FILES = ["daemon.py", "sharedtask.py", "shared_mem.py", "check_done.py", "common.py", "install_daemon_task.py", "auto_dispatch.py", "crawler_base.py", "code_quality_gate.py", "health.py"]
+AUTO_UPDATE_FILES = ["daemon.py", "sharedtask.py", "shared_mem.py", "check_done.py", "common.py", "install_daemon_task.py", "auto_dispatch.py", "crawler_base.py", "code_quality_gate.py", "health.py", "ds_harness.py", "ai_router.py"]
 _LOCK_FILE = os.path.join(PROJECT, ".daemon.lock")
 RID_RE = re.compile(r'^rec[A-Za-z0-9]{6,}$')
 CRAWL_MARKERS = ("剩余", "收尾", "OEM", "oem", "section", "零件抓取", "_remaining_sections")
@@ -368,13 +368,21 @@ def auto_execute_code_dev(rid, title, content):
         if "common" in content.lower():
             ctx_files.append("common.py")
 
+        # 检查ds_harness.py是否存在
+        harness_path = os.path.join(PROJECT, "ds_harness.py")
+        if not os.path.exists(harness_path):
+            return f"ERROR: ds_harness.py不存在，请先auto_update下载"
+
         # 调用ds_harness生成代码（非auto模式，只生成不执行）
+        # 执行前更新心跳，防止长时间任务阻塞心跳
+        update_heartbeat()
         cmd = [PY, "ds_harness.py", task_desc, "--iter", "1", "--out", target]
         for f in ctx_files:
             if os.path.exists(os.path.join(PROJECT, f)):
                 cmd.extend(["--file", f])
         result = run(cmd, timeout=300)
-        if "FAIL" in result or "无回复" in result:
+        update_heartbeat()
+        if "FAIL" in result or "无回复" in result or result.startswith("ERROR"):
             if backup and os.path.exists(backup):
                 import shutil
                 shutil.copy2(backup, target_path)
