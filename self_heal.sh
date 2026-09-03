@@ -6,10 +6,24 @@
 # ============================================================
 
 INSTANCE="${1:-开发助手}"
-DIR="$HOME/attivo-collab"
+# 自动探测真实部署目录（脚本所在目录优先，兼容云电脑长路径）
+SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+DIR=""
+for d in "$SELF_DIR" "$HOME/.super_doubao/super-doubao-runtime/workspace/attivo-collab" "$HOME/attivo-collab"; do
+  [ -f "$d/daemon.py" ] && DIR="$d" && break
+done
+[ -z "$DIR" ] && DIR="$SELF_DIR"
 RAW="https://raw.githubusercontent.com/han20040706never-dev/attivo-oem-crawler/main"
 
-echo "=== self_heal [$INSTANCE] $(date '+%F %T') ==="
+# 按实例名映射标签
+case "$INSTANCE" in
+  "开发助手") TAGS="代码开发,重构,bug修复,脚本优化" ;;
+  *价格监控*)  TAGS="价格监控,公开信息调研,数据整理" ;;
+  *爬虫*)      TAGS="爬虫,数据整理,配件查询" ;;
+  *)           TAGS="" ;;
+esac
+
+echo "=== self_heal [$INSTANCE] $(date '+%F %T') 目录:$DIR ==="
 
 # 1) 已在运行 -> 幂等跳过
 if pgrep -f "daemon.py" >/dev/null 2>&1; then
@@ -54,8 +68,9 @@ if ! python3 -m py_compile daemon.py 2>/tmp/compile_err; then
 fi
 echo "daemon.py 语法OK"
 
-# 7) 脱离会话启动
-setsid nohup python3 daemon.py --instance "$INSTANCE" --interval 300 >/tmp/daemon.log 2>&1 &
+# 7) 脱离会话启动（补全标签）
+TAG_ARG=""; [ -n "$TAGS" ] && TAG_ARG="--tags $TAGS"
+setsid nohup python3 daemon.py --instance "$INSTANCE" $TAG_ARG --interval 300 >/tmp/daemon.log 2>&1 &
 sleep 4
 
 # 8) 启动结果验证 + 失败诊断
