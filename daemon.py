@@ -141,9 +141,13 @@ def auto_update(force=False):
                     kwargs['creationflags'] = getattr(subprocess, 'CREATE_NEW_PROCESS_GROUP', 0)
                 else:
                     kwargs['start_new_session'] = True
-                subprocess.Popen([sys.executable] + sys.argv, **kwargs)
-                log("  新daemon已启动，当前进程退出")
-                time.sleep(1)
+                _proc = subprocess.Popen([sys.executable] + sys.argv, **kwargs)
+                time.sleep(2)
+                if _proc.poll() is not None:
+                    # 新进程启动失败（如语法错误），旧进程继续运行，避免daemon彻底死亡
+                    log(f"  新daemon启动失败(exit {_proc.returncode})，保留当前进程继续运行")
+                    return updated
+                log(f"  新daemon已启动(PID {_proc.pid})，当前进程退出")
                 os._exit(0)
             except Exception as e:
                 log(f"  自动重启失败: {e}")
@@ -466,13 +470,13 @@ def auto_execute_sysops(rid, title, content):
             updated = auto_update(force=True)
             if "daemon.py" in updated:
                 return f"远程重启完成: daemon.py已更新({','.join(updated)})，自动重启中"
-            # daemon.py没更新，手动重启自己（延迟2秒让任务状态先写入）
+            # daemon.py没更新，手动重启自己（延迟4秒让任务状态先写入）
             def _delayed_restart():
-                time.sleep(2)
+                time.sleep(4)
                 os.execv(sys.executable, [sys.executable] + sys.argv)
             import threading
             threading.Thread(target=_delayed_restart, daemon=True).start()
-            return f"远程重启完成: 代码已是最新({','.join(updated) or '无更新'})，2秒后重启进程"
+            return f"远程重启完成: 代码已是最新({','.join(updated) or '无更新'})，4秒后重启进程"
         # 保活配置类任务（三台云电脑都是Linux Ubuntu）
         if "保活" in title or "keepalive" in title.lower() or "keepalive" in content.lower():
             # 实例名优先用本实例名，也可从内容解析
@@ -489,14 +493,21 @@ def auto_execute_sysops(rid, title, content):
             with open(script_path, 'wb') as f:
                 f.write(r.content)
             os.chmod(script_path, 0o755)
-            update_heartbeat()
-            # 异步执行：保活脚本会pkill当前daemon再启动新的，不能同步等待（否则daemon被杀来不及写结果）
-            subprocess.Popen(["setsid", "bash", script_path, inst_name, inst_tags],
-                             cwd=PROJECT, stdout=open("/tmp/keepalive_setup.log","w"),
-                             stderr=subprocess.STDOUT, start_new_session=True)
-            log(f"  保活脚本已异步启动({inst_name})，3秒后daemon将被重启")
-            time.sleep(3)  # 让_cycle有时间写入任务结果
-            return f"系统运维完成: 保活配置已异步启动({inst_name})，三层保活配置中，daemon将自动重启"
+            # Timer延迟6秒启动保活脚本，立即return让_cycle先complete写入任务结果，
+            # 避免保活脚本pkill在结果写入前杀掉daemon
+            def _delayed_keepalive():
+                time.sleep(6)
+                try:
+                    subprocess.Popen(["setsid", "bash", script_path, inst_name, inst_tags],
+                                     cwd=PROJECT,
+                                     stdout=open("/tmp/keepalive_setup.log","w"),
+                                     stderr=subprocess.STDOUT, start_new_session=True)
+                    log(f"  保活脚本已延迟启动({inst_name})")
+                except Exception as e:
+                    log(f"  保活脚本启动失败: {e}")
+            import threading
+            threading.Thread(target=_delayed_keepalive, daemon=True).start()
+            return f"系统运维完成: 保活配置已派发({inst_name})，6秒后异步执行三层保活，daemon将自动重启"
         else:
             return f"ERROR: 未识别的运维操作，只允许保活配置类任务。content: {content[:200]}"
     except Exception as e:
@@ -553,7 +564,12 @@ def _cycle():
             if "处理中" not in ver:
                 log(f"  认领校验失败: {ver[:120]}")
                 continue
-            result = try_auto_execute(rid, title, typ, content)
+            try:
+                result = try_auto_execute(rid, title, typ, content)
+            except Exception as _e:
+                # 单任务异常不能崩溃整个巡检循环，上报失败后继续下一个
+                result = f"ERROR: 执行异常 {_e}"
+                log(f"  任务执行异常: {title} -> {_e}")
             if result is None:
                 log(f"  需AI处理: {title}")
                 continue
