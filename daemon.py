@@ -1088,6 +1088,7 @@ def main():
     p.add_argument("--interval", type=int, default=300)
     p.add_argument("--once", action="store_true")
     a = p.parse_args()
+    global INSTANCE_NAME, INSTANCE_TAGS
     if a.instance:
         INSTANCE_NAME = a.instance
     if a.tags:
