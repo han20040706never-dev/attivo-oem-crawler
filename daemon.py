@@ -15,6 +15,7 @@
   🟡 缺失文件不创建→本地不存在也下载
 """
 import sys, io, os, time, subprocess, json, datetime, argparse, re, hashlib, tempfile
+import requests  # 全局导入，避免各函数局部遗漏导致 name 'requests' is not defined
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from common import log, run, _norm, _atomic_write, _fetch_github_file
 try:
