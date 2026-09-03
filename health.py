@@ -187,4 +187,69 @@ try:
 except Exception as e:
     print(f"  检查失败: {e}")
 
+# 10. 深度自检（合并自healthcheck.py：任务卡死/记忆/配置/版本/API）
+print("\n【深度自检】")
+try:
+    from common import cli as _cli, cell as _cell
+    BASE_T = "MYQybnKkZaXY2Yswagyc7pKNnRf"
+    TASK_T = "tblGwGpuGna0zGQG"
+    MEM_T = "tbl2oncwMgoSEUl4"
+    deep_issues = []
+    # 任务卡死/积压
+    try:
+        td = _cli(["+record-list", "--base-token", BASE_T, "--table-id", TASK_T,
+                   "--limit", "100", "--format", "json", "--as", "user"])
+        if td and td.get("ok"):
+            trows, tcols = td["data"].get("data", []), td["data"].get("fields", [])
+            tidx = {n: i for i, n in enumerate(tcols)}
+            nowt = datetime.datetime.now()
+            for row in trows:
+                def _g(n):
+                    i = tidx.get(n, -1)
+                    return row[i] if 0 <= i < len(row) else ""
+                st = _cell(_g("状态")); tt = _cell(_g("任务标题")); up = _cell(_g("更新时间"))
+                try:
+                    hrs = (nowt - datetime.datetime.fromisoformat(up.replace("Z","").replace("+00:00","").replace("+08:00",""))).total_seconds()/3600
+                except:
+                    hrs = -1
+                if st == "处理中" and hrs > 24:
+                    deep_issues.append(f"任务卡死: {tt[:30]} 处理中{hrs:.0f}h")
+                if st == "待处理" and hrs > 72:
+                    deep_issues.append(f"任务积压: {tt[:30]} 待处理{hrs:.0f}h")
+    except Exception as e:
+        deep_issues.append(f"任务检查失败: {e}")
+    # 配置完整性
+    try:
+        cfg = open(os.path.join(PROJECT, "config.py"), encoding='utf-8').read()
+        for k in ["DEEPSEEK", "GITHUB_PAT", "ODOO"]:
+            if k not in cfg:
+                deep_issues.append(f"配置缺{k}")
+    except Exception as e:
+        deep_issues.append(f"配置检查失败: {e}")
+    # 记忆重复/空内容
+    try:
+        md = _cli(["+record-list", "--base-token", BASE_T, "--table-id", MEM_T,
+                   "--limit", "100", "--format", "json", "--as", "user"])
+        if md and md.get("ok"):
+            mrows, mcols = md["data"].get("data", []), md["data"].get("fields", [])
+            midx = {n: i for i, n in enumerate(mcols)}
+            titles = []
+            for row in mrows:
+                ti = midx.get("标题", -1)
+                if 0 <= ti < len(row):
+                    tv = _cell(row[ti])
+                    if tv: titles.append(tv)
+            dup = {t: titles.count(t) for t in set(titles) if titles.count(t) > 1}
+            for t, c in list(dup.items())[:3]:
+                deep_issues.append(f"记忆重复: {t[:20]} x{c}")
+    except Exception:
+        pass
+    if deep_issues:
+        for msg in deep_issues[:10]:
+            print(f"  ⚠ {msg}")
+    else:
+        print("  ✓ 无卡死/积压，配置完整，记忆无重复")
+except Exception as e:
+    print(f"  深度自检失败: {e}")
+
 print("\n" + "=" * 60)
