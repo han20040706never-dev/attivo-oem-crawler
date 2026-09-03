@@ -41,7 +41,7 @@
 （本地豆包变更偏好/决策后在此追加）
 
 ---
-*最后更新：2026-09-03 12:49*
+*最后更新：2026-09-03 12:54*
 
 
 ## 云电脑使用说明
@@ -86,3 +86,10 @@ Python: 3.12.11
 - [09-03 00:03] [云电脑 爬虫脚本自检+心跳更新] {'reusable_experience': None, 'pitfalls': None, 'reusable_code_script_name': ['daemon.py', 'sharedtask.py', 'shared_mem.py', 'config.py'], 'output_data_file_path': '/sandboxdata/workspace/file/attivo-collab/oemkb.db'}
 
 - [09-02 21:30] [云电脑自检反馈：daemon保活+密钥+git冲突] 已处理：1.daemon保活已改5分钟计划任务(install_daemon_task.py) 2.oemkb.db已加入.gitignore并从仓库删除 3.sharedtask.py判空已修复且在auto_update列表 4.待用户操作：config.py密钥需同步到云电脑(config-export→config-import)
+
+
+## 踩坑教训
+
+- [09-03 12:54] [改造crawl_yamaha_pdfs.py继承crawler_base.CrawlerBase] ERROR: DeepSeek生成失败 ERROR(exit 1): File "/opt/python3.12/bin/python3", line 1
+    ELF
+SyntaxError: source code cannot contain null bytes
