@@ -329,3 +329,9 @@
 - 方案:sanitize_lead_html保留h1-4/b/strong/列表/表格/span字号等白名单排版,剥data-oe-version/data-last-history-steps编辑器元数据和script/on事件;分隔标题加<strong>;SEP_PATTERN兼容新旧块且前导<div><br></div>可选(更早期块此前导缺失)。新增--rebuild强制全量重建(忽略hash)。
 - 治理:cleanup_legacy_blocks.py(可复用)——改挂残留块删除、商机已删的孤儿块就地转富文本保留历史。已rebuild 167条+清理62+39个,最终旧格式/粘连残留=0,210联系人富文本。改前备份_backup_comment_*.json。
 - 教训:Odoo comment/description都是HTML字段,同步必须保留HTML不能剥纯文本;历史块格式有多代(有无<br>前导、有无strong),正则要全兼容。
+
+
+- 新增 smart.py,并挂到 ax route / ax dsedit:
+  - `ax route "任务"` 一行决策通道:录音总结/业务最终判断=豆包亲自;代码/debug/报错=DeepSeek;分类摘要翻译=免费AI;爬虫/价格监控/公开调研=云电脑(自动给sharedtask.push+assignee);Odoo读写=本地对应ax命令(通行费toll/报销expense/线索newlead/库存stock)。
+  - `ax dsedit 文件... -m 需求 [--apply]`:脚本内部读文件发DeepSeek,默认只产出 .new/.diff 不覆盖,py_compile通过才--apply原子替换。**源码不进豆包上下文,豆包只看一行摘要+审diff**。
+- 关键教训:①DeepSeek常把一个完整文件拆成多个```围栏块返回,提取必须 re.findall 拼接所有块,不能search只取第一块(否则截断在中间)。②dsedit必须默认出diff人工审核——实测DS把ai_router(364行)越界自由重写成621行,靠diff拦截未apply。③PowerShell命令行传中文长需求会被引号切断(argparse exit2),改为写.py驱动import调用。④Edit工具对含f-string花括号/大文件常报Native execution failed,改用.py脚本str.replace。⑤ai_router成功进度[AI]响应xs走stderr被PowerShell当红色错误,已改AI_DEBUG环境变量才显示,错误stderr保留。
