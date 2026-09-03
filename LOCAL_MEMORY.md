@@ -313,3 +313,6 @@
 - bug12: 旧版本daemon在auto_update更新前认领保活任务自杀 -> auto_execute_sysops开头保活前force更新
 - bug13: update_heartbeat把tags写成单字列表 -> 内置BUILTIN标签映射兜底写入
 - 教训: 新增函数用第三方库必须确认顶部全局import; Linux/Windows进程参数必须区分
+
+
+- **待办(D分片)**：三台并发写 instances.json 互相覆盖，方案=每台只写 instances_<名>.json 分片+health聚合，已派开发助手做 instances_shard.py(recvu8JjMFvCyd)，产出后本地审核py_compile再集成进 daemon/health。
