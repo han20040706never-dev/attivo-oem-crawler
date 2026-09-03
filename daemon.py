@@ -174,7 +174,7 @@ def task_matches_tags(task_type, title, tags):
         score += int(completed / (completed + failed) * 5)
     return score >= 10
 
-def get_pending_tasks(max_tasks=5):
+def get_pending_tasks(max_tasks=20):
     out = run(["sharedtask.py", "pending"], timeout=30)
     if not out or out.startswith("ERROR"):
         if out:
