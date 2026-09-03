@@ -41,7 +41,7 @@
 （本地豆包变更偏好/决策后在此追加）
 
 ---
-*最后更新：2026-09-03 14:16*
+*最后更新：2026-09-03 14:17*
 
 
 ## 云电脑使用说明
@@ -137,6 +137,10 @@ Python: 3.12.11
 
 
 ## 踩坑教训
+
+- [09-03 14:17] [优化ai_router.py与ds_harness.py集成：统一AI调用入口] ERROR: DeepSeek生成失败 ERROR(exit 1): File "/opt/python3.12/bin/python3", line 1
+    ELF
+SyntaxError: source code cannot contain null bytes
 
 - [09-03 14:16] [统一Odoo操作封装：审计crm_ops.py/create_expense.py/sync_leads.py重复代码] ERROR: DeepSeek生成失败 ERROR(exit 1): File "/opt/python3.12/bin/python3", line 1
     ELF
