@@ -1157,6 +1157,20 @@ def main():
         INSTANCE_NAME = a.instance
     if a.tags:
         INSTANCE_TAGS = a.tags
+    # 标签容错：shell可能把中文标签拆成单字，从instances.json恢复
+    if INSTANCE_TAGS:
+        tag_parts = [t.strip() for t in INSTANCE_TAGS.split(",") if t.strip()]
+        if tag_parts and all(len(t) == 1 for t in tag_parts):
+            try:
+                ij = os.path.join(PROJECT, "instances.json")
+                if os.path.exists(ij):
+                    idata = json.load(open(ij, encoding='utf-8'))
+                    saved = idata.get("instances", {}).get(INSTANCE_NAME, {}).get("tags", "")
+                    if isinstance(saved, str) and saved and not all(len(t.strip())<=1 for t in saved.split(",")):
+                        INSTANCE_TAGS = saved
+                        log(f"  标签被拆成单字，已从instances.json恢复: {INSTANCE_TAGS}")
+            except Exception:
+                pass
     if INSTANCE_NAME:
         log(f"daemon v3.0启动，实例={INSTANCE_NAME}, 标签={INSTANCE_TAGS}")
     else:
