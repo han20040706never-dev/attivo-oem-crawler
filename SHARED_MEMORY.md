@@ -41,7 +41,7 @@
 （本地豆包变更偏好/决策后在此追加）
 
 ---
-*最后更新：2026-09-03 14:15*
+*最后更新：2026-09-03 14:16*
 
 
 ## 云电脑使用说明
@@ -137,6 +137,10 @@ Python: 3.12.11
 
 
 ## 踩坑教训
+
+- [09-03 14:16] [改造crawl_bg.py + crawl_full.py继承crawler_base] ERROR: DeepSeek生成失败 ERROR(exit 1): File "/opt/python3.12/bin/python3", line 1
+    ELF
+SyntaxError: source code cannot contain null bytes
 
 - [09-03 14:15] [改造crawl_diagrams.py继承crawler_base.CrawlerBase] ERROR: DeepSeek生成失败 ERROR(exit 1): File "/opt/python3.12/bin/python3", line 1
     ELF
