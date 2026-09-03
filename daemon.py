@@ -1157,10 +1157,18 @@ def main():
         INSTANCE_NAME = a.instance
     if a.tags:
         INSTANCE_TAGS = a.tags
-    # 标签容错：shell可能把中文标签拆成单字，从instances.json恢复
-    if INSTANCE_TAGS:
-        tag_parts = [t.strip() for t in INSTANCE_TAGS.split(",") if t.strip()]
-        if tag_parts and all(len(t) == 1 for t in tag_parts):
+    # 标签容错：shell可能把中文标签拆成单字，从内置映射/instances.json恢复
+    BUILTIN_TAGS = {
+        "开发助手": "代码开发,重构,bug修复,脚本优化",
+        "云电脑 价格监控": "价格监控,公开信息调研,数据整理",
+        "云电脑 爬虫脚本": "爬虫,数据整理,配件查询",
+    }
+    if INSTANCE_NAME and (not INSTANCE_TAGS or
+        all(len(t.strip()) == 1 for t in INSTANCE_TAGS.split(",") if t.strip())):
+        if INSTANCE_NAME in BUILTIN_TAGS:
+            INSTANCE_TAGS = BUILTIN_TAGS[INSTANCE_NAME]
+            log(f"  标签兜底恢复(内置映射): {INSTANCE_TAGS}")
+        else:
             try:
                 ij = os.path.join(PROJECT, "instances.json")
                 if os.path.exists(ij):
@@ -1168,7 +1176,7 @@ def main():
                     saved = idata.get("instances", {}).get(INSTANCE_NAME, {}).get("tags", "")
                     if isinstance(saved, str) and saved and not all(len(t.strip())<=1 for t in saved.split(",")):
                         INSTANCE_TAGS = saved
-                        log(f"  标签被拆成单字，已从instances.json恢复: {INSTANCE_TAGS}")
+                        log(f"  标签从instances.json恢复: {INSTANCE_TAGS}")
             except Exception:
                 pass
     if INSTANCE_NAME:
