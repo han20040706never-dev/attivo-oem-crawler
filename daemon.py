@@ -454,6 +454,11 @@ def auto_execute_sysops(rid, title, content):
     """自动执行系统运维任务：只允许白名单操作（保活配置等）。云电脑均为Linux。"""
     log(f"  自动执行系统运维: {title}")
     try:
+        # 保活前先强制更新，避免旧版本同步执行保活脚本自杀
+        if "保活" in title:
+            updated = auto_update(force=True)
+            if "daemon.py" in updated:
+                return f"保活前检测到daemon更新({','.join(updated)})，自动重启后将重新认领"
         # 远程重启：强制拉取最新代码，有更新则auto_update自动重启，无更新也手动重启
         if "重启" in title:
             log("  收到远程重启指令，强制更新并重启...")
