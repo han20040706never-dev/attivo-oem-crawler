@@ -625,9 +625,21 @@ def update_heartbeat():
         with open(reg_file, 'r', encoding='utf-8') as f:
             reg = json.load(f)
         instances = reg.setdefault("instances", {})
-        inst = instances.setdefault(INSTANCE_NAME, {"tags": INSTANCE_TAGS or [], "completed": 0, "failed": 0})
+        # 标签始终保证为正确字符串，防止旧列表数据反复写入
+        _BUILTIN = {
+            "开发助手": "代码开发,重构,bug修复,脚本优化",
+            "云电脑 价格监控": "价格监控,公开信息调研,数据整理",
+            "云电脑 爬虫脚本": "爬虫,数据整理,配件查询",
+        }
+        _correct_tags = INSTANCE_TAGS if isinstance(INSTANCE_TAGS, str) and INSTANCE_TAGS else _BUILTIN.get(INSTANCE_NAME, "")
+        inst = instances.setdefault(INSTANCE_NAME, {"tags": _correct_tags, "completed": 0, "failed": 0})
         inst["last_seen"] = datetime.datetime.now().isoformat()
-        inst["tags"] = INSTANCE_TAGS or inst.get("tags", [])
+        # 旧数据tags可能是单字列表，用正确字符串覆盖
+        old_tags = inst.get("tags")
+        if not isinstance(old_tags, str) or (old_tags and all(len(t.strip()) <= 1 for t in old_tags.replace(",", " "))):
+            inst["tags"] = _correct_tags
+        elif _correct_tags:
+            inst["tags"] = _correct_tags
         with open(reg_file, 'w', encoding='utf-8') as f:
             json.dump(reg, f, ensure_ascii=False, indent=2)
         # push到GitHub
