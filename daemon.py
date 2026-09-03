@@ -122,6 +122,24 @@ def auto_update():
             log(f"  自动更新: {', '.join(updated)}")
         if failures:
             log(f"  自动更新部分失败: {'; '.join(failures)}")
+        # daemon.py更新后自动重启（加载新代码）
+        if "daemon.py" in updated:
+            log("  daemon.py已更新，自动重启加载新代码...")
+            try:
+                # 释放锁
+                try:
+                    if msvcrt and os.path.exists(_LOCK_FILE):
+                        lf = open(_LOCK_FILE, 'r')
+                        msvcrt.locking(lf.fileno(), msvcrt.LK_UNLCK, 1)
+                        lf.close()
+                except: pass
+                # 启动新进程
+                subprocess.Popen([sys.executable] + sys.argv, cwd=PROJECT,
+                               creationflags=getattr(subprocess, 'CREATE_NEW_PROCESS_GROUP', 0))
+                log("  新daemon已启动，当前进程退出")
+                os._exit(0)
+            except Exception as e:
+                log(f"  自动重启失败: {e}")
         return updated
     except Exception as e:
         log(f"  自动更新检查失败: {e}")
