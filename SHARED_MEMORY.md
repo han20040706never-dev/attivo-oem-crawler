@@ -41,7 +41,7 @@
 （本地豆包变更偏好/决策后在此追加）
 
 ---
-*最后更新：2026-09-03 14:18*
+*最后更新：2026-09-03 14:19*
 
 
 ## 云电脑使用说明
@@ -137,6 +137,8 @@ Python: 3.12.11
 
 
 ## 踩坑教训
+
+- [09-03 14:19] [保活配置-Linux三层终极保活(脚本优化)] ERROR: 系统运维异常 name 'requests' is not defined
 
 - [09-03 14:18] [清理重复健康检查：合并health.py和healthcheck.py] ERROR: DeepSeek生成失败 ERROR(exit 1): File "/opt/python3.12/bin/python3", line 1
     ELF
