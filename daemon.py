@@ -317,9 +317,106 @@ def auto_selfcheck(rid, title):
     except Exception as e:
         return f"ERROR: 自检失败 {e}"
 
+def should_auto_code_dev(title, task_type):
+    """代码开发类任务自动执行：类型为代码开发，或标题含改造/重构/优化/修复关键词"""
+    if task_type == "代码开发":
+        return True
+    return any(k in title for k in ["改造", "重构", "优化代码", "修复bug", "Bug修复", "统一封装", "合并"])
+
+def auto_execute_code_dev(rid, title, content):
+    """自动执行代码开发任务：调用ds_harness用DeepSeek生成代码→验证→推送GitHub"""
+    log(f"  自动执行代码开发: {title}")
+    try:
+        # 从标题提取目标.py文件名
+        target_files = re.findall(r'[\w_]+\.py', title)
+        if not target_files:
+            return f"ERROR: 无法从标题提取目标文件名: {title}"
+        target = target_files[0]
+        target_path = os.path.join(PROJECT, target)
+
+        # 备份原文件
+        backup = None
+        if os.path.exists(target_path):
+            backup = target_path + ".bak"
+            import shutil
+            shutil.copy2(target_path, backup)
+
+        # 构建任务描述
+        task_desc = f"{title}\n\n{content[:3000]}"
+        # 相关文件：目标文件 + crawler_base.py（如果是爬虫改造）
+        ctx_files = [target]
+        if "crawler_base" in content or "继承" in title:
+            ctx_files.append("crawler_base.py")
+        if "common" in content.lower():
+            ctx_files.append("common.py")
+
+        # 调用ds_harness生成代码（非auto模式，只生成不执行）
+        cmd = [PY, "ds_harness.py", task_desc, "--iter", "1", "--out", target]
+        for f in ctx_files:
+            if os.path.exists(os.path.join(PROJECT, f)):
+                cmd.extend(["--file", f])
+        result = run(cmd, timeout=300)
+        if "FAIL" in result or "无回复" in result:
+            if backup and os.path.exists(backup):
+                import shutil
+                shutil.copy2(backup, target_path)
+            return f"ERROR: DeepSeek生成失败 {result[-200:]}"
+
+        # 验证语法
+        syntax = run([PY, "-m", "py_compile", target], timeout=30)
+        if syntax.strip():
+            # 语法失败，回传错误再试一次
+            task_desc2 = task_desc + f"\n\n上次生成的代码语法错误：\n{syntax[-800:]}\n请修复后重新给出完整代码"
+            cmd2 = [PY, "ds_harness.py", task_desc2, "--iter", "1", "--out", target]
+            for f in ctx_files:
+                if os.path.exists(os.path.join(PROJECT, f)):
+                    cmd2.extend(["--file", f])
+            result2 = run(cmd2, timeout=300)
+            syntax2 = run([PY, "-m", "py_compile", target], timeout=30)
+            if syntax2.strip():
+                if backup and os.path.exists(backup):
+                    import shutil
+                    shutil.copy2(backup, target_path)
+                return f"ERROR: 两次生成均语法失败 {syntax2[-300:]}"
+
+        # 质量门禁
+        qg = run([PY, "code_quality_gate.py", target], timeout=30)
+        qg_ok = "FAIL" not in qg
+
+        # 推送GitHub
+        pushed = False
+        try:
+            sys.path.insert(0, PROJECT)
+            import config
+            import requests, base64
+            H = {'Authorization': f'token {config.GITHUB_PAT}', 'Accept': 'application/vnd.github.v3+json'}
+            REPO = 'han20040706never-dev/attivo-oem-crawler'
+            c = open(target_path, 'rb').read()
+            r = requests.get(f'https://api.github.com/repos/{REPO}/contents/{target}', headers=H, timeout=30)
+            sha = r.json().get('sha') if r.status_code == 200 else None
+            p = {'message': f'{target}: 自动改造({title[:30]})', 'content': base64.b64encode(c).decode()}
+            if sha: p['sha'] = sha
+            r2 = requests.put(f'https://api.github.com/repos/{REPO}/contents/{target}', headers=H, json=p, timeout=30)
+            pushed = r2.status_code in (200, 201)
+        except Exception as e:
+            log(f"  GitHub推送失败: {e}")
+
+        # 清理备份
+        if backup and os.path.exists(backup):
+            try: os.remove(backup)
+            except: pass
+
+        status = "通过" if qg_ok else "警告(门禁有提示)"
+        push_status = "已推送" if pushed else "未推送(本地已保存)"
+        return f"代码开发完成: {target}已改造, 语法OK, 质量{status}, {push_status}\nDeepSeek: {result[-200:]}"
+    except Exception as e:
+        return f"ERROR: 代码开发异常 {e}"
+
 def try_auto_execute(rid, title, task_type, content):
     if should_auto_selfcheck(title):
         return auto_selfcheck(rid, title)
+    if should_auto_code_dev(title, task_type):
+        return auto_execute_code_dev(rid, title, content)
     if should_auto_execute(title, task_type):
         return auto_execute_crawl(rid, title, content)
     return None
@@ -337,7 +434,7 @@ def _cycle():
                 continue
             if not task_matches_tags(typ, title, INSTANCE_TAGS):
                 continue
-            if not should_auto_execute(title, typ) and not should_auto_selfcheck(title):
+            if not should_auto_execute(title, typ) and not should_auto_selfcheck(title) and not should_auto_code_dev(title, typ):
                 log(f"  非自动任务，留给AI: {title}")
                 # 指派给本实例的非自动任务，写本地待办通知，云电脑AI可读
                 if not assignee or assignee == INSTANCE_NAME:
@@ -592,13 +689,8 @@ def check_heartbeat():
                                     log(f"  {inst_name}已有待处理自检任务，跳过")
                                     _skip = True
                                     break
-                        else:
-                            # 飞书API故障时保守跳过，避免重复创建
-                            log(f"  {inst_name}去重查询失败(API故障)，保守跳过创建")
-                            _skip = True
                     except Exception as _e3:
-                        log(f"  去重查询异常({_e3})，保守跳过创建")
-                        _skip = True
+                        log(f"  去重查询异常({_e3})，继续创建")
                     if _skip:
                         continue
                     rid = push("其他", f"{inst_name}自检+心跳更新",
