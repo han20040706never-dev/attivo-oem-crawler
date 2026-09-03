@@ -124,8 +124,22 @@ def auto_update(force=False):
             log(f"  自动更新: {', '.join(updated)}")
         if failures:
             log(f"  自动更新部分失败: {'; '.join(failures)}")
-        # daemon.py更新后自动重启（加载新代码）
+        # daemon.py更新后自动重启（加载新代码）；60秒内只重启一次，防CDN版本抖动循环
         if "daemon.py" in updated:
+            restart_stamp = os.path.join(PROJECT, ".restart_stamp")
+            can_restart = True
+            try:
+                if os.path.exists(restart_stamp) and time.time() - os.path.getmtime(restart_stamp) < 60:
+                    can_restart = False
+                    log("  60秒内已重启过，本次仅更新文件，下轮巡检加载新代码")
+            except OSError:
+                pass
+            if not can_restart:
+                return updated
+            try:
+                open(restart_stamp, "wb").close()
+            except OSError:
+                pass
             log("  daemon.py已更新，自动重启加载新代码...")
             try:
                 # 释放锁
@@ -526,6 +540,12 @@ def try_auto_execute(rid, title, task_type, content):
 
 def _cycle():
     log("=== 巡检开始 ===")
+    if INSTANCE_NAME:
+        # 巡检一开始先续命心跳，防止中间长任务（代码开发/DeepSeek调用最长5分钟）导致心跳超时
+        try:
+            update_heartbeat()
+        except Exception as _he:
+            log(f"  巡检前心跳更新失败: {_he}")
     sync_out = run(["shared_mem.py", "sync"], timeout=60)
     log(f"经验同步: {sync_out[:120]}")
     if INSTANCE_NAME and not INSTANCE_TAGS:
