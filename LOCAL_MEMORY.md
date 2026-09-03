@@ -322,3 +322,10 @@
 - common.py run()固定 [sys.executable]+cmd_args;daemon auto_execute_code_dev里 cmd=[PY,...] 再传给run,实际执行 python3 python3 ds_harness.py,报ELF null bytes错误。这解释了之前所有云电脑自动代码任务失败。
 - 修复:daemon里所有run([PY,...])去掉PY,直接run(["ds_harness.py",...])等,共5处已推送。
 - 教训:调用common.run前确认它是否已自动加解释器;subprocess报ELF/null bytes先查是不是把解释器当脚本传了。
+
+
+## 09-03 16:40 联系人备注粘连根治(sync_leads重写)
+- 问题:sync_leads旧用strip_html把商机富文本剥成纯文本(\n),而res.partner.comment是HTML字段不认\n,导致标题/加粗/段落全粘连。
+- 方案:sanitize_lead_html保留h1-4/b/strong/列表/表格/span字号等白名单排版,剥data-oe-version/data-last-history-steps编辑器元数据和script/on事件;分隔标题加<strong>;SEP_PATTERN兼容新旧块且前导<div><br></div>可选(更早期块此前导缺失)。新增--rebuild强制全量重建(忽略hash)。
+- 治理:cleanup_legacy_blocks.py(可复用)——改挂残留块删除、商机已删的孤儿块就地转富文本保留历史。已rebuild 167条+清理62+39个,最终旧格式/粘连残留=0,210联系人富文本。改前备份_backup_comment_*.json。
+- 教训:Odoo comment/description都是HTML字段,同步必须保留HTML不能剥纯文本;历史块格式有多代(有无<br>前导、有无strong),正则要全兼容。
