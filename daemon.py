@@ -479,12 +479,13 @@ def auto_execute_sysops(rid, title, content):
                 f.write(r.content)
             os.chmod(script_path, 0o755)
             update_heartbeat()
-            r2 = subprocess.run(["bash", script_path, inst_name, inst_tags],
-                                capture_output=True, text=True, timeout=180, cwd=PROJECT)
-            update_heartbeat()
-            out = (r2.stdout or "")[-600:]
-            err = (r2.stderr or "")[-200:]
-            return f"系统运维完成: 保活配置({inst_name})\n{out}\n{err}"
+            # 异步执行：保活脚本会pkill当前daemon再启动新的，不能同步等待（否则daemon被杀来不及写结果）
+            subprocess.Popen(["setsid", "bash", script_path, inst_name, inst_tags],
+                             cwd=PROJECT, stdout=open("/tmp/keepalive_setup.log","w"),
+                             stderr=subprocess.STDOUT, start_new_session=True)
+            log(f"  保活脚本已异步启动({inst_name})，3秒后daemon将被重启")
+            time.sleep(3)  # 让_cycle有时间写入任务结果
+            return f"系统运维完成: 保活配置已异步启动({inst_name})，三层保活配置中，daemon将自动重启"
         else:
             return f"ERROR: 未识别的运维操作，只允许保活配置类任务。content: {content[:200]}"
     except Exception as e:
