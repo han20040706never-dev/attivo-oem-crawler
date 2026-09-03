@@ -299,3 +299,9 @@
 - Linux容器无crontab写入权限，保活靠三层：bashrc/profile自启 + supervisord + watchdog_loop.sh(60秒) + 平台定时任务
 - daemon新增系统运维任务自动执行(auto_execute_sysops)，保活配置类任务可通过sharedtask派发，daemon自动认领执行，无需用户手动转发
 - daemon根本bug修复：main函数缺global声明导致--instance参数不生效(2026-09-03)
+
+## 2026-09-03 v1.8.0 全模块体检优化
+- healthcheck.py深度自检(任务卡死/记忆重复/配置/版本/API)合并进health.py，healthcheck改为兼容入口
+- 新增3个重构任务派发开发助手：boatsnet+shop继承基类、yamamotor系列继承基类、9脚本消除common重复函数
+- ax.py统一入口36命令完整；probe_*/parse_suzuki_pdf为一次性脚本不强制继承基类
+- 深度自检发现shared_mem记忆重复(自检任务完成记录xN)，待daemon去重优化
