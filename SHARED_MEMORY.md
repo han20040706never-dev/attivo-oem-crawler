@@ -138,6 +138,8 @@ Python: 3.12.11
 
 ## 踩坑教训
 
+- [09-03 14:17] [消除9个脚本中重复定义的common函数] ERROR: 无法从标题提取目标文件名: 消除9个脚本中重复定义的common函数
+
 - [09-03 14:17] [改造scrape_yamamotor系列3个脚本继承crawler_base.CrawlerBase] ERROR: 无法从标题提取目标文件名: 改造scrape_yamamotor系列3个脚本继承crawler_base.CrawlerBase
 
 - [09-03 14:17] [改造crawl_boatsnet.py和scrape_shop.py继承crawler_base.CrawlerBase] ERROR: DeepSeek生成失败 ERROR(exit 1): File "/opt/python3.12/bin/python3", line 1
