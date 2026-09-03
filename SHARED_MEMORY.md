@@ -41,7 +41,7 @@
 （本地豆包变更偏好/决策后在此追加）
 
 ---
-*最后更新：2026-09-03 13:29*
+*最后更新：2026-09-03 13:33*
 
 
 ## 云电脑使用说明
@@ -91,6 +91,8 @@ Python: 3.12.11
 
 
 ## 踩坑教训
+
+- [09-03 13:33] [megazip剩余45个section零件抓取收尾] ERROR: 爬虫0成功(DONE: 0/45 ok, 45 errors)
 
 - [09-03 12:54] [改造crawl_yamaha_pdfs.py继承crawler_base.CrawlerBase] ERROR: DeepSeek生成失败 ERROR(exit 1): File "/opt/python3.12/bin/python3", line 1
     ELF
