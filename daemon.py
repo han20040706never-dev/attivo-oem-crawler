@@ -78,12 +78,13 @@ def release_cycle_lock(fd):
     except OSError:
         pass
 
-def auto_update():
+def auto_update(force=False):
+    """从GitHub拉取最新脚本（巡检循环中30分钟节流；force=True时启动强制检查）"""
     try:
         import requests
         stamp = os.path.join(PROJECT, ".auto_update_stamp")
         try:
-            if os.path.exists(stamp) and time.time() - os.path.getmtime(stamp) < 1800:
+            if not force and os.path.exists(stamp) and time.time() - os.path.getmtime(stamp) < 1800:
                 return []
         except OSError:
             pass
@@ -439,15 +440,28 @@ def auto_execute_code_dev(rid, title, content):
         return f"ERROR: 代码开发异常 {e}"
 
 def should_auto_sysops(title, task_type):
-    """系统运维类任务自动执行：保活配置、环境部署、脚本更新"""
+    """系统运维类任务自动执行：保活配置、环境部署、脚本更新、远程重启"""
     if task_type == "系统运维":
         return True
-    return any(k in title for k in ["保活配置", "部署保活", "环境配置", "配置保活", "keepalive"])
+    return any(k in title for k in ["保活配置", "部署保活", "环境配置", "配置保活", "keepalive", "重启daemon", "重启进程", "更新代码并重启"])
 
 def auto_execute_sysops(rid, title, content):
     """自动执行系统运维任务：只允许白名单操作（保活配置等）。云电脑均为Linux。"""
     log(f"  自动执行系统运维: {title}")
     try:
+        # 远程重启：强制拉取最新代码，有更新则auto_update自动重启，无更新也手动重启
+        if "重启" in title:
+            log("  收到远程重启指令，强制更新并重启...")
+            updated = auto_update(force=True)
+            if "daemon.py" in updated:
+                return f"远程重启完成: daemon.py已更新({','.join(updated)})，自动重启中"
+            # daemon.py没更新，手动重启自己（延迟2秒让任务状态先写入）
+            def _delayed_restart():
+                time.sleep(2)
+                os.execv(sys.executable, [sys.executable] + sys.argv)
+            import threading
+            threading.Thread(target=_delayed_restart, daemon=True).start()
+            return f"远程重启完成: 代码已是最新({','.join(updated) or '无更新'})，2秒后重启进程"
         # 保活配置类任务（三台云电脑都是Linux Ubuntu）
         if "保活" in title or "keepalive" in title.lower() or "keepalive" in content.lower():
             # 实例名优先用本实例名，也可从内容解析
@@ -1147,7 +1161,7 @@ def main():
         log(f"daemon v3.0启动，实例={INSTANCE_NAME}, 标签={INSTANCE_TAGS}")
     else:
         log("daemon v3.0启动（仅回收模式）")
-    auto_update()
+    auto_update(force=True)  # 启动时强制检查更新，确保运行最新代码
     boot_out = run(["shared_mem.py", "bootstrap"], timeout=120)
     log(f"启动经验同步: {boot_out[:150]}")
     if a.once:
