@@ -138,6 +138,10 @@ Python: 3.12.11
 
 ## 踩坑教训
 
+- [09-03 14:15] [改造crawl_diagrams.py继承crawler_base.CrawlerBase] ERROR: DeepSeek生成失败 ERROR(exit 1): File "/opt/python3.12/bin/python3", line 1
+    ELF
+SyntaxError: source code cannot contain null bytes
+
 - [09-03 14:15] [改造crawl_suzuki_eparts.py继承crawler_base.CrawlerBase] ERROR: DeepSeek生成失败 ERROR(exit 1): File "/opt/python3.12/bin/python3", line 1
     ELF
 SyntaxError: source code cannot contain null bytes
