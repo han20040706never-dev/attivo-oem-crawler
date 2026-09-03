@@ -292,3 +292,10 @@
 - 经验质量评分：complete时AI提取经验后评分0-5，≤1分不push防垃圾经验污染共享记忆。
 - 负载感知：active_tasks追踪，推荐时负载高的实例降权。
 - 关键教训：subprocess调用外部脚本+短timeout=不可靠，能用cli()直接import就别用subprocess。
+
+## 2026-09-03 环境事实（重要纠错）
+- **三台豆包云电脑全部是Linux Ubuntu容器**（开发助手/云电脑价格监控/云电脑爬虫脚本），只有用户本地电脑是Windows
+- 云电脑保活一律用linux_keepalive_ultimate.sh，禁止再给云电脑发.ps1/Windows命令
+- Linux容器无crontab写入权限，保活靠三层：bashrc/profile自启 + supervisord + watchdog_loop.sh(60秒) + 平台定时任务
+- daemon新增系统运维任务自动执行(auto_execute_sysops)，保活配置类任务可通过sharedtask派发，daemon自动认领执行，无需用户手动转发
+- daemon根本bug修复：main函数缺global声明导致--instance参数不生效(2026-09-03)
