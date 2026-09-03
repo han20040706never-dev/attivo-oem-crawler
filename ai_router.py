@@ -285,7 +285,8 @@ def chat(prompt, context="", provider=None, task="zh", model=None,
                 _stats["calls"] += 1
                 _stats["by_provider"][pname] = _stats["by_provider"].get(pname, 0) + 1
                 _cache[ck] = (result, time.time())
-                print(f"[AI] {pname} 响应 {dt:.1f}s", file=sys.stderr)
+                if os.environ.get("AI_DEBUG"):
+                    print(f"[AI] {pname} 响应 {dt:.1f}s", file=sys.stderr)
                 return result
             else:
                 # 无结果，短冷却60秒
