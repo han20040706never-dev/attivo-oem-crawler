@@ -138,6 +138,8 @@ Python: 3.12.11
 
 ## 踩坑教训
 
+- [09-03 14:15] [Linux开发助手保活：加cron @reboot] ERROR: 无法从标题提取目标文件名: Linux开发助手保活：加cron @reboot
+
 - [09-03 14:14] [保活配置-Linux三层终极保活(脚本优化)] ERROR: 系统运维异常 name 'requests' is not defined
 
 - [09-03 13:42] [保活配置-Linux三层终极保活(脚本优化)] ERROR: 系统运维异常 name 'requests' is not defined
