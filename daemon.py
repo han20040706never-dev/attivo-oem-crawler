@@ -427,7 +427,7 @@ def auto_execute_code_dev(rid, title, content):
         # 调用ds_harness生成代码（非auto模式，只生成不执行）
         # 执行前更新心跳，防止长时间任务阻塞心跳
         update_heartbeat()
-        cmd = [PY, "ds_harness.py", task_desc, "--iter", "1", "--out", target]
+        cmd = ["ds_harness.py", task_desc, "--iter", "1", "--out", target]
         for f in ctx_files:
             if os.path.exists(os.path.join(PROJECT, f)):
                 cmd.extend(["--file", f])
@@ -440,16 +440,16 @@ def auto_execute_code_dev(rid, title, content):
             return f"ERROR: DeepSeek生成失败 {result[-200:]}"
 
         # 验证语法
-        syntax = run([PY, "-m", "py_compile", target], timeout=30)
+        syntax = run(["-m", "py_compile", target], timeout=30)
         if syntax.strip():
             # 语法失败，回传错误再试一次
             task_desc2 = task_desc + f"\n\n上次生成的代码语法错误：\n{syntax[-800:]}\n请修复后重新给出完整代码"
-            cmd2 = [PY, "ds_harness.py", task_desc2, "--iter", "1", "--out", target]
+            cmd2 = ["ds_harness.py", task_desc2, "--iter", "1", "--out", target]
             for f in ctx_files:
                 if os.path.exists(os.path.join(PROJECT, f)):
                     cmd2.extend(["--file", f])
             result2 = run(cmd2, timeout=300)
-            syntax2 = run([PY, "-m", "py_compile", target], timeout=30)
+            syntax2 = run(["-m", "py_compile", target], timeout=30)
             if syntax2.strip():
                 if backup and os.path.exists(backup):
                     import shutil
@@ -457,7 +457,7 @@ def auto_execute_code_dev(rid, title, content):
                 return f"ERROR: 两次生成均语法失败 {syntax2[-300:]}"
 
         # 质量门禁
-        qg = run([PY, "code_quality_gate.py", target], timeout=30)
+        qg = run(["code_quality_gate.py", target], timeout=30)
         qg_ok = "FAIL" not in qg
 
         # 推送GitHub
