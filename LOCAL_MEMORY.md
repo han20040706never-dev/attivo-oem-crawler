@@ -349,3 +349,8 @@
 - **crm.lead 和 res.partner 都要查**：有的人只有联系人没商机（廖小肖=partner592、章杰峰=partner191）。
 - **名称对不上时用地名/宽词兜底**：OCR误识（绿森→绿三木，彭石根商机=ID372 A绿森园林）、同音字（吴和平→吴禾平 ID318）、繁简（号→號）；搜不到人名就搜城市/字号/电话。
 - 最终状态分四态：在库 / 已归档(active=False) / 他人·仅联系人 / 未建。
+
+## 联系人倒推商机（2026-09-04 三次纠正，重要方法）
+- 商机名常是**公司名/店名，不含人名**（章杰峰的商机=ID170 宜昌新京穗船舶，名字里没有"章杰峰"），按人名 ilike 永远搜不到。
+- **正解：先在 res.partner 找到联系人 → 再用 crm.lead 的 partner_id=联系人id 反查其名下商机**（active in True/False、不限user_id）。例：partner191章杰峰 → lead170；partner259彭石根 → lead372。
+- 查重标准顺序：①res.partner 按人名/字号/电话/同音字找联系人 → ②partner_id 反查 crm.lead → ③仍无再按地名宽词兜底。不要只靠 crm.lead.name ilike。
