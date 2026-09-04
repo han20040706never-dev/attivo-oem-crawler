@@ -354,3 +354,5 @@
 - 商机名常是**公司名/店名，不含人名**（章杰峰的商机=ID170 宜昌新京穗船舶，名字里没有"章杰峰"），按人名 ilike 永远搜不到。
 - **正解：先在 res.partner 找到联系人 → 再用 crm.lead 的 partner_id=联系人id 反查其名下商机**（active in True/False、不限user_id）。例：partner191章杰峰 → lead170；partner259彭石根 → lead372。
 - 查重标准顺序：①res.partner 按人名/字号/电话/同音字找联系人 → ②partner_id 反查 crm.lead → ③仍无再按地名宽词兜底。不要只靠 crm.lead.name ilike。
+- **已固化脚本，名单查重禁止再手写现查（2026-09-04）**：`python wx_dedup.py --file 名单.txt [--xlsx 出表.xlsx]`，一次做全（active全态+不限user+crm.lead&res.partner两表+partner倒推+繁简/省市冲突惩罚），输出四态 在库/已归档/他人·仅联系人/未建，并列歧义或纯字母代号(JOKER/AA~ZSP)转"需人工"不硬配；字母代号必须原样命中候选才计分（phone_core只留中文会把字母剥光导致误配，已在脚本内修复）。7/7回归通过。
+- **超长截图OCR已固化**：`python longshot_ocr.py 图.jpg [...]`，自动纵向切片(重叠100)+按y归行+去重出同名txt；RapidOCR只收np.array/路径不收PIL对象。替代每次现写切片脚本。
