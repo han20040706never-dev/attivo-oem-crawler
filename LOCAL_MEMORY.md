@@ -335,3 +335,11 @@
   - `ax route "任务"` 一行决策通道:录音总结/业务最终判断=豆包亲自;代码/debug/报错=DeepSeek;分类摘要翻译=免费AI;爬虫/价格监控/公开调研=云电脑(自动给sharedtask.push+assignee);Odoo读写=本地对应ax命令(通行费toll/报销expense/线索newlead/库存stock)。
   - `ax dsedit 文件... -m 需求 [--apply]`:脚本内部读文件发DeepSeek,默认只产出 .new/.diff 不覆盖,py_compile通过才--apply原子替换。**源码不进豆包上下文,豆包只看一行摘要+审diff**。
 - 关键教训:①DeepSeek常把一个完整文件拆成多个```围栏块返回,提取必须 re.findall 拼接所有块,不能search只取第一块(否则截断在中间)。②dsedit必须默认出diff人工审核——实测DS把ai_router(364行)越界自由重写成621行,靠diff拦截未apply。③PowerShell命令行传中文长需求会被引号切断(argparse exit2),改为写.py驱动import调用。④Edit工具对含f-string花括号/大文件常报Native execution failed,改用.py脚本str.replace。⑤ai_router成功进度[AI]响应xs走stderr被PowerShell当红色错误,已改AI_DEBUG环境变量才显示,错误stderr保留。
+
+
+## 微信/名单对照Odoo查重方法（2026-09-04 纠正）
+- **必须含已丢失**：crm.lead 的 search/search_read 默认 active_test 只返回 active=True，会把"已丢失(active=False)"商机误判成未建。对照/查重 domain 必须加 ('active','in',[True,False])。
+- **关键词要拆短+兼顾繁简体和别名**：整串 ilike 易漏（"拾月叁号"漏了繁体"拾月叁號"ID683）；用最短核心词（人名/字号），公司名、别名都试。
+- 案例：安庆吴林=ID221(已丢失)、九江飞籁特艇业陈柳=ID219(已丢失)、黄冈拾月叁號=ID683(在库,繁体號)。
+- 输出状态分三态：在库 / 已丢失 / 未建，不要只分有无。
+- 生成的 xlsx 经 present_files 后可能被客户端预览锁定(WinError32)，覆盖会静默失败（2>$null会吞掉）；被锁就换新文件名保存，且交付前必须回读计数校验。
