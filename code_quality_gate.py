@@ -136,4 +136,7 @@ def main():
     sys.exit(1 if failed > 0 else 0)
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except Exception as e:
+        print(f"FAIL {type(e).__name__}: {e}")
