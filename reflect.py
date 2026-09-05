@@ -103,6 +103,32 @@ def check_iron_rules():
         except:
             pass
 
+def check_reuse():
+    """复用/省token: 能力地图是否最新、norm 是否重复实现、临时脚本是否堆积。"""
+    pys = [f for f in glob.glob(os.path.join(PROJECT, "*.py"))]
+    idx = os.path.join(PROJECT, "SCRIPT_INDEX.md")
+    if os.path.exists(idx):
+        it = os.path.getmtime(idx)
+        stale = [os.path.basename(f) for f in pys if os.path.getmtime(f) > it and not os.path.basename(f).startswith("_") and "backup" not in os.path.basename(f).lower()]
+        if stale:
+            add("WARN", "复用", "SCRIPT_INDEX 落后于脚本 %s，跑 build_script_index.py 刷新" % stale[:6])
+    else:
+        add("WARN", "复用", "缺 SCRIPT_INDEX.md，跑 python build_script_index.py 建能力地图(新任务先查它再动手)")
+    dup = []
+    for f in pys:
+        bn = os.path.basename(f)
+        if bn == "cn_stock.py" or bn.startswith("_"):
+            continue
+        t = open(f, encoding="utf-8", errors="ignore").read()
+        if re.search(r"def norm\(", t) and "cn_stock" not in t and ("MARTYR" in t or re.search(r"-0\{?2", t)):
+            dup.append(bn)
+    if dup:
+        add("INFO", "复用", "自定义 norm 未委托 cn_stock(口径漂移风险): %s" % dup)
+    tmp = [os.path.basename(f) for f in pys if os.path.basename(f).startswith("_") and "backup" not in os.path.basename(f).lower()]
+    if len(tmp) > 6:
+        add("WARN", "复用", "%d 个 _ 临时脚本未清: %s" % (len(tmp), tmp[:8]))
+
+
 def main():
     print("=" * 55)
     print("自动反思检查", datetime.datetime.now().strftime("%Y-%m-%d %H:%M"))
@@ -112,6 +138,7 @@ def main():
     check_large_files()
     check_behavior()
     check_iron_rules()
+    check_reuse()
     if not ISSUES:
         print("\n✓ 未发现问题")
     else:
