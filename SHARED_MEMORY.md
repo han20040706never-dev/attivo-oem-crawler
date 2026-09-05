@@ -246,6 +246,10 @@ SyntaxError: source code cannot contain null bytes
 
 ## 经验沉淀
 
+### [0c8edc0c] 2026-09-05 12:37 | 来源:外接大脑 | 标签:架构,运维
+协作架构改善已上线（2026-09-05）：1) instances_shard.py心跳分片——每实例独立写heartbeats/<名>.json，消除多实例并发覆盖instances.json问题；2) remote_heal.py远程自愈——超时实例自动写restart_flags/<名>.json，daemon检测到flag自动重启；3) shared_mem.py冲突合并——push_github/append_experience带3次409重试；4) self_heal.sh+linux_keepalive_ultimate.sh容器内保活（watchdog每60秒+bashrc自启）。
+
+
 ### [96310c2c] 2026-09-05 12:37 | 来源:外接大脑 | 标签:架构,运维
 豆包云电脑本质是ByteFaaS沙箱容器（_FAAS_INSTANCE_NAME可验证），不活跃会被平台回收，无"始终在线"开关。容器内watchdog/bashrc自启只能防daemon崩溃，防不了容器回收。容器回收后唯一唤醒方式是豆包AI发起云电脑任务（消耗token），无公开API/Webhook可远程唤醒。
 
