@@ -392,8 +392,11 @@ def available_providers():
 
 
 if __name__ == "__main__":
-    print("可用provider:", available_providers())
-    print("测试...")
-    r = chat("说OK", max_tokens=10)
-    print(f"回复: {r}")
-    print("统计:", stats())
+    try:
+        print("可用provider:", available_providers())
+        print("测试...")
+        r = chat("说OK", max_tokens=10)
+        print(f"回复: {r}")
+        print("统计:", stats())
+    except Exception as e:
+        print(f"FAIL {type(e).__name__}: {e}")
