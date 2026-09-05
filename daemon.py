@@ -1255,6 +1255,7 @@ def main():
         "开发助手": "代码开发,重构,bug修复,脚本优化",
         "云电脑 价格监控": "价格监控,公开信息调研,数据整理",
         "云电脑 爬虫脚本": "爬虫,数据整理,配件查询",
+        "外接大脑": "调度,分发,中枢,对话,协调,任务管理",
     }
     if INSTANCE_NAME and (not INSTANCE_TAGS or
         all(len(t.strip()) == 1 for t in INSTANCE_TAGS.split(",") if t.strip())):
