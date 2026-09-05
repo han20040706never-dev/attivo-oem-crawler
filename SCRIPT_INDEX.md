@@ -1,7 +1,7 @@
 # 脚本能力地图（自动生成，勿手改）
-> 生成时间 2026-09-05 16:12 · 生成器 `python build_script_index.py`
+> 生成时间 2026-09-05 16:15 · 生成器 `python build_script_index.py`
 > **新任务铁律**：先在本地图找现成脚本/函数 → 再 `ax route` → 都没有才写新脚本；新脚本必须有模块 docstring，写完重跑本生成器入库。
-> 共 95 个脚本，分 11 类。
+> 共 92 个脚本，分 11 类。
 
 
 ## CRM/Odoo 操作（16）
@@ -133,12 +133,9 @@
 | `search_github_outboard` | GitHub搜索船外机配件相关项目 |  |
 | `xlsx2pdf` | xlsx -> PDF（PyMuPDF绘制表格，不依赖Excel/WPS，绝不卡COM） | wlen, new_page, draw_header |
 
-## 其他（6）
+## 其他（3）
 | 脚本 | 用途 | 主要入口/函数 |
 |---|---|---|
-| `_gen2` | DeepSeek 生成 patch_file.py / stock_check_list.py 两个可复用工具, 落盘+编译 |  |
-| `_test2` | （无docstring，待补） | ck |
-| `_test3` | （无docstring，待补） | ck |
 | `add_demand` | 中国大陆需求清单一键填写工具 | check_part, main |
 | `ax` | 统一工作流入口 - 所有操作走这里，强制省token模式 | cmd_query, cmd_part, cmd_customer, cmd_sales, cmd_ai, cmd_think, cmd_summarize, cmd_fetch |
 | `parse_suzuki_pdf` | 铃木原厂PDF零件目录解析 - 提取零件号+名称+适用机型 | extract_parts |
