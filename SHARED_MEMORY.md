@@ -246,6 +246,10 @@ SyntaxError: source code cannot contain null bytes
 
 ## 经验沉淀
 
+### [467c66d4] 2026-09-05 12:37 | 来源:外接大脑 | 标签:架构,运维
+只用豆包的最佳实践=本地主控+云端异步工人：本地豆包始终在线负责任务派发/经验汇总/协调；云电脑按需唤醒（手动说一声即可），通过飞书任务表异步认领任务，GitHub SHARED_MEMORY.md同步经验。不要搞高频定时保活（token消耗大且没必要），有任务手动唤醒最省。
+
+
 ### [0c8edc0c] 2026-09-05 12:37 | 来源:外接大脑 | 标签:架构,运维
 协作架构改善已上线（2026-09-05）：1) instances_shard.py心跳分片——每实例独立写heartbeats/<名>.json，消除多实例并发覆盖instances.json问题；2) remote_heal.py远程自愈——超时实例自动写restart_flags/<名>.json，daemon检测到flag自动重启；3) shared_mem.py冲突合并——push_github/append_experience带3次409重试；4) self_heal.sh+linux_keepalive_ultimate.sh容器内保活（watchdog每60秒+bashrc自启）。
 
