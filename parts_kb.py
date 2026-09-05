@@ -17,21 +17,11 @@ def norm(code):
     Returns:
         标准化后的件号字符串
     """
-    if not code:
-        return ''
-    try:
-        s = str(code)
-        # 去括号及其内容
-        s = re.sub(r"\(.*?\)", "", s)
-        # 转大写
-        s = s.upper()
-        # 去尾缀
-        s = re.sub(r"-(OIL|ZN|AL|O|MARTYR|RIKEN|COPPER|BEST-[A-Z0-9]+)$", "", s)
-        # 去尾部 -00/-000
-        s = re.sub(r"-0{2,3}$", "", s)
-        return s.strip()
-    except Exception:
-        return str(code).strip().upper()
+    # 单一真相源在 cn_stock.norm（件号归一规则只维护一份，避免漂移）；此处委托并保持 parts_kb.norm 兼容
+    import os as _os, sys as _sys
+    _sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+    from cn_stock import norm as _cn_norm
+    return _cn_norm(code)
 
 
 # 部位纠正映射: 93106系列=水泵侧水路油封(封冷却水)
