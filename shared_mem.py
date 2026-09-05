@@ -320,37 +320,106 @@ def bootstrap():
     print("\n=== 引导完成 ===")
 
 
-def push_github(section, content):
-    """追加内容到GitHub SHARED_MEMORY.md指定section并push"""
-    import requests, base64, datetime
-    url = f"https://api.github.com/repos/{GH_REPO}/contents/{GH_PATH}"
+def _gh_get_file(path):
+    """获取GitHub文件内容+sha，失败返回(None,None)"""
+    import requests, base64
+    url = f"https://api.github.com/repos/{GH_REPO}/contents/{path}"
     headers = {"Authorization": f"token {config.GITHUB_PAT}", "Accept": "application/vnd.github.v3+json"}
-    r = requests.get(url, headers=headers, timeout=15)
-    if r.status_code != 200:
-        print(f"FAIL: 获取GitHub文件失败 {r.status_code}")
-        return
-    sha = r.json()["sha"]
-    current = base64.b64decode(r.json()["content"]).decode('utf-8')
-    # 在指定section下追加
-    marker = f"## {section}"
+    try:
+        r = requests.get(url, headers=headers, timeout=15)
+        if r.status_code == 200:
+            data = r.json()
+            return base64.b64decode(data["content"]).decode('utf-8'), data["sha"]
+    except Exception:
+        pass
+    return None, None
+
+
+def _gh_put_file(path, content, sha, message):
+    """推送文件到GitHub，返回(ok, status_code)"""
+    import requests, base64
+    url = f"https://api.github.com/repos/{GH_REPO}/contents/{path}"
+    headers = {"Authorization": f"token {config.GITHUB_PAT}", "Accept": "application/vnd.github.v3+json"}
+    payload = {"message": message, "content": base64.b64encode(content.encode('utf-8')).decode()}
+    if sha:
+        payload["sha"] = sha
+    try:
+        r = requests.put(url, headers=headers, json=payload, timeout=15)
+        return r.status_code in (200, 201), r.status_code
+    except Exception:
+        return False, 0
+
+
+def push_github(section, content, max_retries=3):
+    """追加内容到GitHub SHARED_MEMORY.md指定section并push（带冲突重试合并）"""
+    import datetime, re, time
     entry = f"\n- [{datetime.datetime.now().strftime('%m-%d %H:%M')}] {content}"
-    if marker in current:
-        updated = current.replace(marker, marker + "\n" + entry, 1)
-    else:
-        updated = current + f"\n\n## {section}\n{entry}\n"
-    # 更新最后更新时间
-    import re
-    updated = re.sub(r'\*最后更新：.*?\*', f'*最后更新：{datetime.datetime.now().strftime("%Y-%m-%d %H:%M")}*', updated)
-    payload = {
-        "message": f"sync: {section} - {content[:40]}",
-        "content": base64.b64encode(updated.encode()).decode(),
-        "sha": sha
-    }
-    r2 = requests.put(url, headers=headers, json=payload, timeout=15)
-    if r2.status_code in (200, 201):
-        print(f"OK: 已push到GitHub SHARED_MEMORY.md [{section}]")
-    else:
-        print(f"FAIL: push失败 {r2.status_code}: {r2.text[:150]}")
+
+    for attempt in range(max_retries):
+        current, sha = _gh_get_file(GH_PATH)
+        if current is None:
+            if attempt < max_retries - 1:
+                time.sleep(1)
+                continue
+            print(f"FAIL: 获取GitHub文件失败（重试{max_retries}次）")
+            return
+
+        marker = f"## {section}"
+        if marker in current:
+            updated = current.replace(marker, marker + "\n" + entry, 1)
+        else:
+            updated = current + f"\n\n## {section}\n{entry}\n"
+        updated = re.sub(r'\*最后更新：.*?\*', f'*最后更新：{datetime.datetime.now().strftime("%Y-%m-%d %H:%M")}*', updated)
+
+        ok, status = _gh_put_file(GH_PATH, updated, sha, f"sync: {section} - {content[:40]}")
+        if ok:
+            local_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), GH_PATH)
+            with open(local_path, 'w', encoding='utf-8') as f:
+                f.write(updated)
+            print(f"OK: 已push到GitHub SHARED_MEMORY.md [{section}] (尝试{attempt+1}次)")
+            return
+        if status == 409 and attempt < max_retries - 1:
+            time.sleep(0.5)
+            continue
+        print(f"FAIL: push失败 HTTP {status} (尝试{attempt+1}次)")
+        return
+
+
+def append_experience(experience_text, source="外接大脑", tags=""):
+    """条目化追加经验到共享记忆（带唯一ID和时间戳，冲突安全，最多重试3次）"""
+    import datetime, hashlib, time, re
+    eid = hashlib.md5(f"{experience_text}{datetime.datetime.now().isoformat()}".encode()).hexdigest()[:8]
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+    entry = f"\n### [{eid}] {timestamp} | 来源:{source}"
+    if tags:
+        entry += f" | 标签:{tags}"
+    entry += f"\n{experience_text}\n"
+
+    for attempt in range(3):
+        current, sha = _gh_get_file(GH_PATH)
+        if current is None:
+            time.sleep(1)
+            continue
+        marker = "## 经验沉淀"
+        if marker in current:
+            updated = current.replace(marker, marker + "\n" + entry, 1)
+        else:
+            updated = current + f"\n\n## 经验沉淀\n{entry}\n"
+        updated = re.sub(r'\*最后更新：.*?\*', f'*最后更新：{timestamp}*', updated)
+
+        ok, status = _gh_put_file(GH_PATH, updated, sha, f"experience: {eid} - {experience_text[:30]}")
+        if ok:
+            local_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), GH_PATH)
+            with open(local_path, 'w', encoding='utf-8') as f:
+                f.write(updated)
+            print(f"OK: 经验已沉淀 [{eid}] 来源:{source}")
+            return eid
+        if status == 409 and attempt < 2:
+            time.sleep(0.5)
+            continue
+        print(f"FAIL: 经验沉淀失败 HTTP {status}")
+        return None
+    return None
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
@@ -373,5 +442,7 @@ if __name__ == "__main__":
         search(" ".join(sys.argv[2:]))
     elif cmd == "relevant" and len(sys.argv) >= 3:
         relevant(" ".join(sys.argv[2:]))
+    elif cmd == "append-experience" and len(sys.argv) >= 3:
+        append_experience(sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else "外接大脑", sys.argv[4] if len(sys.argv) > 4 else "")
     else:
         print("参数错误")
