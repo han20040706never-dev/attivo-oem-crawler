@@ -19,10 +19,9 @@ def fix_pos(part, pos):
     return KB.fix_pos(part, pos)
 
 def norm(c):
-    c = re.sub(r"\(.*?\)", "", (c or "").upper())
-    c = re.sub(r"-(OIL|ZN|AL|O|MARTYR|RIKEN|COPPER|BEST-[A-Z0-9]+)$", "", c)
-    c = re.sub(r"-0{2,3}$", "", c)
-    return c.strip()
+    """件号归一单一真相源 cn_stock.norm（保留材质 AL/ZN 与 -W/H）。"""
+    import cn_stock
+    return cn_stock.norm(c)
 def parse_hp(s):
     out = set()
     for x in re.findall(r"\d+", str(s or "")):
@@ -45,7 +44,10 @@ for ln in sd["lines"]:
     if pid != WANG: b["ordx"].add(oid); b["custx"].add(pid)
 
 # 2. 中国仓库存
-ST = json.load(open(os.path.join(TOOL, "_cn_stock_cache.json"), encoding="utf-8"))["ST"]
+_cf = os.path.join(TOOL, "_cn_stock_cache.json")
+ST = json.load(open(_cf, encoding="utf-8"))["ST"] if os.path.exists(_cf) else {}
+if not ST:
+    print("WARN _cn_stock_cache.json 缺失/为空：先跑 recommend_goods.py 建缓存，否则推荐页为空")
 def stock(k):
     v = ST.get(norm(k))
     return (round(v.get("cn", 0) or 0, 1), round(v.get("gl", 0) or 0, 1)) if v else (0.0, 0.0)
