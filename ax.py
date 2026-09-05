@@ -21,7 +21,7 @@ AI类（不占豆包token）:
   demand <编号> <描述> <客户> [...]              - 填中国大陆需求清单（自动查库存）
   expense <发票文件夹>                           - 创建报销草稿
   newlead <名称> [--tag X] [--source X]         - 新建线索（自动解析省份城市）
-  toll <文件夹> [--dry-run]                       - 通行费报销一条龙(PDF+付款+小程序截图)
+  toll <文件夹> [--dry-run] [--merge]             - 通行费一条龙; --merge=整周合并成一条(会计新规)
   tag <ID1,ID2,...> <标签名>                     - 批量打标签
   source <ID1,ID2,...> <来源名>                  - 批量设来源
   checktags                                      - 检查缺标签/来源的记录
