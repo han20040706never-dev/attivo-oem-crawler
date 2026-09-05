@@ -92,10 +92,39 @@ ROUTE = {
     "long": ["deepseek", "ark", "siliconflow", "gemini"],
 }
 
-_stats = {"calls": 0, "errors": 0, "by_provider": {}}
+_stats = {"calls": 0, "errors": 0, "cache_hit": 0, "by_provider": {}}
 _cooldown = {}  # provider -> timestamp until which it's skipped
 _cache = {}     # md5(prompt+task) -> (response, timestamp)
 CACHE_TTL = 3600  # 缓存1小时
+# 磁盘持久化语义缓存：本项目多为一次性脚本进程，内存缓存退出即失，落盘后跨会话命中(重复问题0花费)
+_CACHE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_ai_cache.json")
+_cache_dirty = 0
+def _cache_load():
+    global _cache
+    try:
+        if os.path.exists(_CACHE_FILE):
+            _d = json.load(open(_CACHE_FILE, encoding="utf-8"))
+            _cache = {k: (v["r"], v["t"]) for k, v in _d.items()}
+    except Exception:
+        _cache = {}
+def _cache_save():
+    try:
+        _d = {k: {"r": v[0], "t": v[1]} for k, v in _cache.items()}
+        _tmp = _CACHE_FILE + ".tmp"
+        with open(_tmp, "w", encoding="utf-8") as f:
+            json.dump(_d, f, ensure_ascii=False)
+        os.replace(_tmp, _CACHE_FILE)
+    except Exception:
+        pass
+def _cache_put(ck, result):
+    global _cache_dirty
+    _cache[ck] = (result, time.time())
+    _cache_dirty += 1
+    if _cache_dirty >= 15:
+        _cache_dirty = 0; _cache_save()
+_cache_load()
+import atexit as _atexit
+_atexit.register(_cache_save)
 
 import hashlib
 
@@ -239,7 +268,7 @@ def _detect_lang(text):
 
 
 def chat(prompt, context="", provider=None, task="zh", model=None,
-         max_tokens=2048, temperature=0.3):
+         max_tokens=None, temperature=0.3):
     """
     统一对话接口。
     provider: 指定provider名，None=自动路由
@@ -250,6 +279,9 @@ def chat(prompt, context="", provider=None, task="zh", model=None,
     if context:
         messages.append({"role": "system", "content": context})
     messages.append({"role": "user", "content": prompt})
+
+    if max_tokens is None:  # 任务分级输出上限，简单任务不浪费
+        max_tokens = {"zh": 512, "en": 700, "code": 4096, "long": 4096}.get(task, 512)
 
     if provider:
         chain = [provider]
@@ -263,6 +295,7 @@ def chat(prompt, context="", provider=None, task="zh", model=None,
     if ck in _cache:
         cached_resp, cached_time = _cache[ck]
         if time.time() - cached_time < CACHE_TTL:
+            _stats["cache_hit"] += 1
             return cached_resp
 
     for pname in chain:
@@ -284,7 +317,7 @@ def chat(prompt, context="", provider=None, task="zh", model=None,
             if result:
                 _stats["calls"] += 1
                 _stats["by_provider"][pname] = _stats["by_provider"].get(pname, 0) + 1
-                _cache[ck] = (result, time.time())
+                _cache_put(ck, result)
                 if os.environ.get("AI_DEBUG"):
                     print(f"[AI] {pname} 响应 {dt:.1f}s", file=sys.stderr)
                 return result
@@ -307,8 +340,9 @@ def chat(prompt, context="", provider=None, task="zh", model=None,
 def summarize(text, instruction="总结要点", provider=None):
     """总结文本"""
     prompt = f"{instruction}，用中文，简洁要点式：\n\n{text}"
-    task = "long" if len(text) > 6000 else "zh"
-    return chat(prompt, provider=provider, task=task, max_tokens=4096, temperature=0.2)
+    _long = len(text) > 6000
+    task = "long" if _long else "zh"
+    return chat(prompt, provider=provider, task=task, max_tokens=2500 if _long else 1200, temperature=0.2)
 
 
 def classify(text, categories, provider=None):
