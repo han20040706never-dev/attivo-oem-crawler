@@ -19,7 +19,7 @@ _internal_locs_cache = None
 
 
 def norm(code):
-    """标准化件号: 去括号内容、转大写、去尾缀(-OIL/-ZN等)、去尾部-00/-000。
+    """标准化件号: 去括号、转大写、循环去品牌/油品后缀(MARTYR/RIKEN/OIL/BEST-xx)、去尾部-00；材质后缀 AL(铝)/ZN(锌)/COPPER(铜)与 -W/H 保留(不同SKU，不能合并)。
 
     Args:
         code: 原始件号字符串
@@ -35,9 +35,13 @@ def norm(code):
         s = re.sub(r"\(.*?\)", "", s)
         # 转大写
         s = s.upper()
-        # 去尾缀
-        s = re.sub(r"-(OIL|ZN|AL|O|MARTYR|RIKEN|COPPER|BEST-[A-Z0-9]+)$", "", s)
-        # 去尾部 -00/-000
+        # 去【品牌/供应商/油品】尾缀，循环去链式后缀(如 -AL-MARTYR)；AL/ZN/COPPER 是材质=不同SKU，必须保留(否则铝/锌阳极库存混算)
+        for _ in range(3):
+            t = re.sub(r"-(MARTYR|RIKEN|OIL|O|BEST-[A-Z0-9]+)$", "", s)
+            if t == s:
+                break
+            s = t
+        # 去尾部 -00/-000(仅真正结尾；以 -AL/-ZN/-W/H 结尾时保留)
         s = re.sub(r"-0{2,3}$", "", s)
         return s.strip()
     except Exception:
