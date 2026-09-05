@@ -494,7 +494,7 @@ def cmd_agent(args):
 
 def cmd_route(args):
     """智能路由: 先零token匹配已有脚本(命中直接用不重写), 再选AI执行通道"""
-    import script_match, smart
+    import script_match, smart, task_memory
     q = ' '.join(args)
     res = script_match.find(q)
     if res:
@@ -503,6 +503,12 @@ def cmd_route(args):
             print(f"  {i}. [{sc:.2f}] {name}.py ({cat}) {usage[:45]}")
         if res[0][0] >= 0.2:
             print(f"  => 优先用 {res[0][1]}.py")
+        print()
+    hist = task_memory.recall(q)
+    if hist:
+        print("【历史相似任务】自学习召回:")
+        for s, sc2, note, n, ts in hist:
+            print(f"  [{s:.2f}|{n}次] {sc2}")
         print()
     print("【AI通道】", smart.decide(q))
 
@@ -521,6 +527,42 @@ def cmd_find(args):
         print(f"  {i}. [{sc:.2f}] {name}.py ({cat}) {usage[:55]}")
     if res[0][0] >= 0.2:
         print(f"=> 建议直接用: {res[0][1]}.py (或 ax 对应命令), 不要新写脚本")
+
+
+def cmd_did(args):
+    """完成任务后沉淀方案: ax did \"任务\" \"用的脚本/ax命令\" [\"结果要点\"] (自学习, 供下次相似任务召回)"""
+    import task_memory
+    if len(args) < 2:
+        print('用法: ax did "任务描述" "用的脚本/ax命令" ["结果要点"]')
+        return
+    task_memory.did(args[0], args[1], args[2] if len(args) > 2 else "")
+
+
+def _auto_match(q):
+    """未知命令/新任务自动匹配: 历史相似方案 + 现有脚本, 零token。"""
+    import script_match, task_memory
+    if not q.strip():
+        print(__doc__); return
+    print(f"未识别为命令, 按任务自动匹配: {q}")
+    hist = task_memory.recall(q)
+    if hist:
+        print("【上次相似任务怎么做的】(自学习)")
+        for s, sc, note, n, ts in hist:
+            print(f"  [{s:.2f}|{n}次|{ts}] {sc}")
+    sm = script_match.find(q)
+    if sm:
+        print("【可直接用的已有脚本】")
+        for sc, name, cat, usage in sm[:5]:
+            print(f"  [{sc:.2f}] {name}.py ({cat}) {usage[:45]}")
+        if sm[0][0] >= 0.2:
+            print(f"=> 优先 {sm[0][1]}.py, 别新写; 做完 ax did 沉淀")
+    if not hist and not sm:
+        print("无现成匹配, 确认后再写新脚本; 完成后 ax did 沉淀方案")
+
+
+def cmd_recall(args):
+    """召回历史相似方案+现有脚本: ax recall \"任务\" (新任务第一步)"""
+    _auto_match(" ".join(args))
 
 def cmd_dsedit(args):
     """用AI编辑文件: ax dsedit f.py -m 需求 [--apply]"""
@@ -646,6 +688,7 @@ COMMANDS = {
     "transcribe": cmd_transcribe, "summarize-rec": cmd_summarize_rec,
     "crossref": cmd_crossref, "clean": cmd_clean, "status": cmd_status, "task": cmd_task, "nophone": cmd_nophone, "oem": cmd_oem, "ds": cmd_ds, "agent": cmd_agent, "memory": cmd_memory, "collab": cmd_collab,
     "route": cmd_route, "dsedit": cmd_dsedit, "find": cmd_find,
+    "did": cmd_did, "recall": cmd_recall,
     # 复用工具(2026-09-05)：清单核库存/秒查中国仓/定点补丁/能力地图/推GitHub/反思
     "stocklist": _run_script("stock_check_list.py"), "cnstk": _run_script("cn_stock.py"),
     "patch": _run_script("patch_file.py"), "index": _run_script("build_script_index.py"),
@@ -653,8 +696,11 @@ COMMANDS = {
 }
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2 or sys.argv[1] not in COMMANDS:
+    if len(sys.argv) < 2:
         print(__doc__)
+        sys.exit(0)
+    if sys.argv[1] not in COMMANDS:
+        _auto_match(" ".join(sys.argv[1:]))
         sys.exit(0)
     try:
         COMMANDS[sys.argv[1]](sys.argv[2:])
