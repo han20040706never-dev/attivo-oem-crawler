@@ -540,10 +540,15 @@ def cmd_did(args):
 
 def _auto_match(q):
     """未知命令/新任务自动匹配: 历史相似方案 + 现有脚本, 零token。"""
-    import script_match, task_memory
+    import script_match, task_memory, plan as _plan
     if not q.strip():
         print(__doc__); return
     print(f"未识别为命令, 按任务自动匹配: {q}")
+    _rep, _heavy = _plan.assess(q)
+    if _rep:
+        print(f"⚠ 会重复(信号:{','.join(_rep)}) -> 直接做参数化可复用脚本, 别写一次性临时码")
+    if _heavy:
+        print(f"⚠ 高token(信号:{','.join(_heavy)}) -> 本地脚本处理只回传结果, 原始内容不进上下文")
     hist = task_memory.recall(q)
     if hist:
         print("【上次相似任务怎么做的】(自学习)")
@@ -558,6 +563,15 @@ def _auto_match(q):
             print(f"=> 优先 {sm[0][1]}.py, 别新写; 做完 ax did 沉淀")
     if not hist and not sm:
         print("无现成匹配, 确认后再写新脚本; 完成后 ax did 沉淀方案")
+
+
+def cmd_plan(args):
+    """动手前节能/复用规划: ax plan 任务 (判断重复性/token成本/现成脚本)"""
+    import plan as _plan
+    if not args:
+        print('用法: ax plan "任务描述"')
+        return
+    _plan.plan(" ".join(args))
 
 
 def cmd_recall(args):
@@ -688,7 +702,7 @@ COMMANDS = {
     "transcribe": cmd_transcribe, "summarize-rec": cmd_summarize_rec,
     "crossref": cmd_crossref, "clean": cmd_clean, "status": cmd_status, "task": cmd_task, "nophone": cmd_nophone, "oem": cmd_oem, "ds": cmd_ds, "agent": cmd_agent, "memory": cmd_memory, "collab": cmd_collab,
     "route": cmd_route, "dsedit": cmd_dsedit, "find": cmd_find,
-    "did": cmd_did, "recall": cmd_recall,
+    "did": cmd_did, "recall": cmd_recall, "plan": cmd_plan,
     # 复用工具(2026-09-05)：清单核库存/秒查中国仓/定点补丁/能力地图/推GitHub/反思
     "stocklist": _run_script("stock_check_list.py"), "cnstk": _run_script("cn_stock.py"),
     "patch": _run_script("patch_file.py"), "index": _run_script("build_script_index.py"),
