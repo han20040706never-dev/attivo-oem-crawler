@@ -159,4 +159,7 @@ def main():
         print(f"问题检查失败: {e}")
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        print(f"FAIL {type(e).__name__}: {e}")
