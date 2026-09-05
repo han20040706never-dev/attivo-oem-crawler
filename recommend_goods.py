@@ -13,11 +13,9 @@ SEAL_X = os.path.join(OUTDIR, "2026.9.5油封O圈带货推荐-机型部位对照
 WANG = 156
 
 def norm(c):
-    c = re.sub(r"\(.*?\)", "", (c or "").upper())
-    # W/H=With Housing 是不同物料，绝不能合并；只归一格式尾缀
-    c = re.sub(r"-(OIL|ZN|AL|O|MARTYR|RIKEN|COPPER|BEST-[A-Z0-9]+)$", "", c)
-    c = re.sub(r"-0{2,3}$", "", c)
-    return c.strip()
+    """件号归一单一真相源 cn_stock.norm（保留材质 AL/ZN 与 -W/H，循环去品牌后缀），不再各脚本各写一份。"""
+    import cn_stock
+    return cn_stock.norm(c)
 
 # ---------- 1. 需求清单 ----------
 dem = json.load(open(os.path.join(TOOL, "_demand.json"), encoding="utf-8"))
