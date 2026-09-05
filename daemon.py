@@ -36,7 +36,7 @@ LOG_FILE = os.path.join(PROJECT, "_daemon.log")
 INSTANCE_NAME = os.environ.get("DAEMON_INSTANCE", "")
 INSTANCE_TAGS = os.environ.get("DAEMON_TAGS", "")
 GITHUB_RAW = "https://raw.githubusercontent.com/han20040706never-dev/attivo-oem-crawler/main/"
-AUTO_UPDATE_FILES = ["daemon.py", "sharedtask.py", "shared_mem.py", "check_done.py", "common.py", "install_daemon_task.py", "auto_dispatch.py", "crawler_base.py", "code_quality_gate.py", "health.py", "ds_harness.py", "ai_router.py"]
+AUTO_UPDATE_FILES = ["daemon.py", "sharedtask.py", "shared_mem.py", "check_done.py", "common.py", "install_daemon_task.py", "auto_dispatch.py", "crawler_base.py", "code_quality_gate.py", "health.py", "ds_harness.py", "ai_router.py", "instances_shard.py", "remote_heal.py"]
 _LOCK_FILE = os.path.join(PROJECT, ".daemon.lock")
 RID_RE = re.compile(r'^rec[A-Za-z0-9]{6,}$')
 CRAWL_MARKERS = ("剩余", "收尾", "OEM", "oem", "section", "零件抓取", "_remaining_sections")
@@ -641,6 +641,22 @@ def _cycle():
     sync_memory()
     sync_local_memory()
     update_heartbeat()
+    # 远程自愈：检测是否有针对本实例的重启flag，有则重启
+    try:
+        sys.path.insert(0, PROJECT)
+        from remote_heal import check_flag, clear_flag
+        flag = check_flag(INSTANCE_NAME)
+        if flag:
+            log(f"  检测到远程重启flag: {flag.get('reason')}，4秒后重启...")
+            clear_flag(INSTANCE_NAME)
+            def _delayed_restart():
+                time.sleep(4)
+                os.execv(sys.executable, [sys.executable] + sys.argv)
+            import threading
+            threading.Thread(target=_delayed_restart, daemon=True).start()
+            return
+    except Exception as _re:
+        log(f"  重启flag检测失败: {_re}")
     check_heartbeat()
     check_stale_tasks()
     check_token_usage()
@@ -678,57 +694,30 @@ def sync_memory():
 
 
 def update_heartbeat():
-    """每次巡检更新本实例的last_seen到instances.json并push到GitHub（pull-merge-push防冲突）"""
+    """心跳分片写入：每个实例独立写 heartbeats/<名>.json，彻底消除并发覆盖"""
     if not INSTANCE_NAME:
         return
     try:
-        import datetime, requests
-        reg_file = os.path.join(PROJECT, "instances.json")
-        # pull最新
-        try:
-            r = requests.get(GITHUB_RAW + "instances.json", timeout=15)
-            if r.status_code == 200:
-                remote = r.json()
-                with open(reg_file, 'w', encoding='utf-8') as f:
-                    json.dump(remote, f, ensure_ascii=False, indent=2)
-        except:
-            pass
-        # merge更新
-        with open(reg_file, 'r', encoding='utf-8') as f:
-            reg = json.load(f)
-        instances = reg.setdefault("instances", {})
-        # 标签始终保证为正确字符串，防止旧列表数据反复写入
+        sys.path.insert(0, PROJECT)
+        from instances_shard import write_beat
         _BUILTIN = {
             "开发助手": "代码开发,重构,bug修复,脚本优化",
             "云电脑 价格监控": "价格监控,公开信息调研,数据整理",
             "云电脑 爬虫脚本": "爬虫,数据整理,配件查询",
+            "外接大脑": "调度,分发,中枢,对话,协调,任务管理",
         }
-        _correct_tags = INSTANCE_TAGS if isinstance(INSTANCE_TAGS, str) and INSTANCE_TAGS else _BUILTIN.get(INSTANCE_NAME, "")
-        inst = instances.setdefault(INSTANCE_NAME, {"tags": _correct_tags, "completed": 0, "failed": 0})
-        inst["last_seen"] = datetime.datetime.now().isoformat()
-        # 旧数据tags可能是单字列表，用正确字符串覆盖
-        old_tags = inst.get("tags")
-        if not isinstance(old_tags, str) or (old_tags and all(len(t.strip()) <= 1 for t in old_tags.replace(",", " "))):
-            inst["tags"] = _correct_tags
-        elif _correct_tags:
-            inst["tags"] = _correct_tags
-        with open(reg_file, 'w', encoding='utf-8') as f:
-            json.dump(reg, f, ensure_ascii=False, indent=2)
-        # push到GitHub
+        _tags = INSTANCE_TAGS if isinstance(INSTANCE_TAGS, str) and INSTANCE_TAGS else _BUILTIN.get(INSTANCE_NAME, "")
+        # 读取本地统计
+        completed = failed = 0
         try:
-            import base64
-            sys.path.insert(0, PROJECT)
-            import config
-            H = {'Authorization': f'token {config.GITHUB_PAT}', 'Accept': 'application/vnd.github.v3+json'}
-            REPO = 'han20040706never-dev/attivo-oem-crawler'
-            content = open(reg_file, 'rb').read()
-            r2 = requests.get(f'https://api.github.com/repos/{REPO}/contents/instances.json', headers=H, timeout=15)
-            sha = r2.json().get('sha') if r2.status_code == 200 else None
-            p = {'message': f'heartbeat: {INSTANCE_NAME}', 'content': base64.b64encode(content).decode()}
-            if sha: p['sha'] = sha
-            requests.put(f'https://api.github.com/repos/{REPO}/contents/instances.json', headers=H, json=p, timeout=15)
-        except Exception as e:
-            log(f"  心跳push失败: {e}")
+            stats = load_instance_stats()
+            me = stats.get(INSTANCE_NAME, {})
+            completed = me.get("completed", 0)
+            failed = me.get("failed", 0)
+        except: pass
+        ok, result = write_beat(INSTANCE_NAME, _tags, completed, failed)
+        if not ok:
+            log(f"  分片心跳写入失败: {result}")
     except Exception as e:
         log(f"心跳更新失败: {e}")
 
@@ -786,37 +775,25 @@ def sync_local_memory():
 
 
 def check_heartbeat():
-    """检查云电脑实例心跳，先从GitHub拉最新instances.json，last_seen超过30分钟告警"""
+    """检查云电脑实例心跳（分片聚合），超时则告警+自动下发重启flag"""
     try:
         import json, datetime, requests
-        reg_file = os.path.join(PROJECT, "instances.json")
-        # 先从GitHub拉最新的instances.json（双通道，raw常超时）
-        try:
-            remote_bytes = _fetch_github_file("instances.json")
-            if remote_bytes:
-                remote = json.loads(remote_bytes.decode('utf-8'))
-                with open(reg_file, 'w', encoding='utf-8') as f:
-                    json.dump(remote, f, ensure_ascii=False, indent=2)
-        except:
-            pass
-        if not os.path.exists(reg_file):
-            return
-        with open(reg_file, 'r', encoding='utf-8') as f:
-            reg = json.load(f)
+        sys.path.insert(0, PROJECT)
+        from instances_shard import aggregate, get_stale
+        from remote_heal import write_flag
+
         now = datetime.datetime.now()
+        # 分片聚合获取全局状态
+        all_instances = aggregate()
         stale = []
-        for name, info in reg.get("instances", {}).items():
-            last = info.get("last_seen", "")
-            if not last:
+        for name, info in all_instances.items():
+            if name == INSTANCE_NAME:
+                continue  # 不检查自己
+            if info.get("status") == "stale":
+                elapsed = info.get("elapsed_min", 0)
+                stale.append((name, f"{elapsed:.0f}分钟无心跳"))
+            elif info.get("status") in ("no_heartbeat", "unknown"):
                 stale.append((name, "无心跳记录"))
-                continue
-            try:
-                last_time = datetime.datetime.fromisoformat(last.replace("Z", "+00:00").replace("+08:00", ""))
-                elapsed = (now - last_time).total_seconds() / 60
-                if elapsed > 30:
-                    stale.append((name, f"{elapsed:.0f}分钟无心跳"))
-            except:
-                stale.append((name, "心跳时间解析失败"))
         if stale:
             msg = "实例心跳告警: " + ", ".join(f"{n}({s})" for n, s in stale)
             recovery = "恢复步骤：在对应云电脑上运行 cd C:\\attivo-collab; python daemon.py --instance \"实例名\" --tags \"标签\" --interval 300，或运行 python install_daemon_task.py 注册计划任务保活"
@@ -885,6 +862,24 @@ def check_heartbeat():
                     json.dump(last_sc, f, ensure_ascii=False)
             except Exception as e2:
                 log(f"  自检任务创建失败: {e2}")
+            # 自动自愈：对超时实例下发重启flag（每30分钟最多一次，用本地缓存去重）
+            try:
+                heal_cache = os.path.join(PROJECT, "_heal_cache.json")
+                last_heal = {}
+                if os.path.exists(heal_cache):
+                    try: last_heal = json.load(open(heal_cache, 'r', encoding='utf-8'))
+                    except: pass
+                for inst_name, _ in stale:
+                    if time.time() - last_heal.get(inst_name, 0) < 1800:
+                        continue
+                    write_flag(inst_name, f"心跳超时，外接大脑自动自愈", "外接大脑")
+                    last_heal[inst_name] = time.time()
+                    log(f"  自愈: 已下发重启flag → {inst_name}")
+                with open(heal_cache, 'w', encoding='utf-8') as f:
+                    json.dump(last_heal, f, ensure_ascii=False)
+            except Exception as _he:
+                log(f"  自愈flag下发失败: {_he}")
+
             # 写入通知文件，本地AI对话开始时可读
             notif_file = os.path.join(PROJECT, "_notifications.json")
             notifs = []
