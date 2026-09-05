@@ -113,7 +113,7 @@ def main():
         invoices.append({"file": f, "info": info})
 
     # 2) 图片分类
-    minis, pays, lists = [], [], []
+    minis, pays = [], []
     for f in imgs:
         kind, data = classify_image(os.path.join(a.folder, f))
         print(f"  图片 {f[:20]}… -> {kind}")
@@ -121,8 +121,7 @@ def main():
             minis.append({"file": f, "d": data})
         elif kind in ("pay", "unknown"):
             pays.append({"file": f, "amount": (data or {}).get("amount")})
-        elif kind == "list":
-            lists.append(f)  # 多路线汇总明细图,仅作凭证附件(merge整批挂一条)
+        # kind==list 高速小程序汇总图: 不挂附件(路线/时间由发票PDF解析覆盖), 直接忽略
 
     client = OdooClient(ODOO_URL, ODOO_DB, ODOO_UID, ODOO_PWD, dry_run=a.dry_run)
     exp = HRExpense(client, {
@@ -141,7 +140,7 @@ def main():
         all_attachments = []
         total_amount = 0.0
         earliest_dt = None
-        idx = 0
+        bucket = []
         for inv in invoices:
             info = inv["info"]
             # 3) 按金额匹配小程序明细（备注以它为准）
@@ -182,26 +181,24 @@ def main():
                 dt = info["datetime"]
             if earliest_dt is None or dt < earliest_dt:
                 earliest_dt = dt
-            idx += 1
-            desc_line = ce.build_description(info)
-            merged_lines.append(f"{idx}. {desc_line}")
-            if info["amount"] is not None:
-                total_amount += info["amount"]
             atts = [inv["file"]] + ([mini["file"]] if mini else []) + ([pay["file"]] if pay else [])
-            for af in atts:
-                if af not in all_attachments:
-                    all_attachments.append(af)
+            bucket.append((dt, ce.build_description(info), info["amount"], atts))
 
         if earliest_dt is None:
             print("未解析到任何有效通行费记录"); sys.exit(0)
 
-        # 多路线汇总明细图(list)作为凭证一并挂到合并单
-        for _lf in lists:
-            if _lf not in all_attachments:
-                all_attachments.append(_lf)
+        # 按发生时间升序排序后再编号(早的在前)
+        bucket.sort(key=lambda x: x[0])
+        for _i, (_dt, _desc, _amt, _atts) in enumerate(bucket, 1):
+            merged_lines.append(f"{_i}. {_desc}")
+            if _amt is not None:
+                total_amount += _amt
+            for af in _atts:
+                if af not in all_attachments:
+                    all_attachments.append(af)
 
         week_title = build_week_title(earliest_dt)
-        merged_desc = "\n".join(merged_lines) + f"\n合计 ¥{total_amount:.2f}（金额栏留空，由会计填写）"
+        merged_desc = "\n".join(merged_lines) + f"\n合计 ¥{total_amount:.2f}"
         exp_date = earliest_dt.strftime("%Y-%m-%d")
 
         # 防重复：批次维度
