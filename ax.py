@@ -596,6 +596,18 @@ def cmd_collab(args):
         print(f"未知子命令: {sub}")
         print(cmd_collab.__doc__)
 
+def _run_script(script, timeout=900):
+    """通用：以当前解释器跑同目录独立脚本并透传参数（复用入口，避免每个脚本重复封装）。"""
+    def _f(args):
+        import subprocess
+        r = subprocess.run([sys.executable, script] + list(args), capture_output=True,
+                           text=True, encoding="utf-8", errors="replace", timeout=timeout)
+        print((r.stdout or "").strip())
+        if r.returncode != 0:
+            print((r.stderr or "").strip()[-800:])
+    return _f
+
+
 COMMANDS = {
     "query": cmd_query, "part": cmd_part, "stock": cmd_stock,
     "customer": cmd_customer, "sales": cmd_sales,
@@ -609,6 +621,10 @@ COMMANDS = {
     "transcribe": cmd_transcribe, "summarize-rec": cmd_summarize_rec,
     "crossref": cmd_crossref, "clean": cmd_clean, "status": cmd_status, "task": cmd_task, "nophone": cmd_nophone, "oem": cmd_oem, "ds": cmd_ds, "agent": cmd_agent, "memory": cmd_memory, "collab": cmd_collab,
     "route": cmd_route, "dsedit": cmd_dsedit,
+    # 复用工具(2026-09-05)：清单核库存/秒查中国仓/定点补丁/能力地图/推GitHub/反思
+    "stocklist": _run_script("stock_check_list.py"), "cnstk": _run_script("cn_stock.py"),
+    "patch": _run_script("patch_file.py"), "index": _run_script("build_script_index.py"),
+    "ghpush": _run_script("gh_push.py"), "reflect": _run_script("reflect.py"),
 }
 
 if __name__ == "__main__":
