@@ -41,7 +41,7 @@
 （本地豆包变更偏好/决策后在此追加）
 
 ---
-*最后更新：2026-09-05 12:37*
+*最后更新：2026-09-05 12:46*
 
 
 ## 云电脑使用说明
@@ -265,3 +265,8 @@ SyntaxError: source code cannot contain null bytes
 ### [ef7a485f] 2026-09-05 11:55 | 来源:外接大脑 | 标签:架构,心跳
 心跳分片模块instances_shard.py已上线，解决多实例并发覆盖instances.json问题。每个实例独立写heartbeats/<名>.json，聚合读取。
 
+
+
+## ★2026-09-05架构定调：全面按需，废弃一切保活
+
+- [09-05 12:46] 【最高优先级，覆盖此前所有 daemon/心跳/watchdog/三层保活方案】1)本质：豆包云电脑=ByteFaaS容器，不活跃必被回收，无始终在线开关、无远程唤醒API；容器内 watchdog/bashrc自启/supervisord/crontab/@reboot/5分钟计划任务只能防进程崩溃，防不了容器回收，实测三层保活全部无效，高频定时唤醒只烧token。2)唯一架构=本地主控(不跑daemon)+云端按需工人：本地 `python cloud_handoff.py send 实例名 类型 标题 内容` 入队并生成一次性指令；用户开云电脑贴一次→git pull→sharedtask.py pending→claim→干活→complete/ask→ax memory push回收经验→结束，【禁止】自举daemon/心跳/保活/周期自检，跑完即退。3)本地Windows已停常驻daemon(PID清理)，保活脚本统一归档 _archive_keepalive/；任务看板sharedtask.py(飞书多维表CRUD走lark-cli、不耗AI token)保留照用。4)踩坑：DeepSeek报 source code cannot contain null bytes/ELF=把python二进制当源码执行，common.run()已带解释器、调用方别再手传sys.executable；飞书token失效(code99991668/invalid JSON)时巡检秒退空转，先修token别空跑。
