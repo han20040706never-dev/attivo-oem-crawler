@@ -493,9 +493,34 @@ def cmd_agent(args):
         print(f"全部失败: {e}")
 
 def cmd_route(args):
-    """智能路由: ax route "任务描述" 自动选执行器（同agent）"""
-    import smart
-    print(smart.decide(' '.join(args)))
+    """智能路由: 先零token匹配已有脚本(命中直接用不重写), 再选AI执行通道"""
+    import script_match, smart
+    q = ' '.join(args)
+    res = script_match.find(q)
+    if res:
+        print("【已有脚本】零token本地匹配, 命中就直接用不要新写:")
+        for i, (sc, name, cat, usage) in enumerate(res[:3], 1):
+            print(f"  {i}. [{sc:.2f}] {name}.py ({cat}) {usage[:45]}")
+        if res[0][0] >= 0.2:
+            print(f"  => 优先用 {res[0][1]}.py")
+        print()
+    print("【AI通道】", smart.decide(q))
+
+
+def cmd_find(args):
+    """智能匹配已有脚本: ax find \"任务描述\" (零token, 命中直接用不重复造轮子)"""
+    import script_match
+    if not args:
+        print("用法: ax find \"任务描述\"  例: ax find 核一下这个Excel清单的中国仓库存")
+        return
+    res = script_match.find(' '.join(args))
+    if not res:
+        print("无匹配; 先 ax index 刷新能力地图, 确认无现成脚本再写新的")
+        return
+    for i, (sc, name, cat, usage) in enumerate(res, 1):
+        print(f"  {i}. [{sc:.2f}] {name}.py ({cat}) {usage[:55]}")
+    if res[0][0] >= 0.2:
+        print(f"=> 建议直接用: {res[0][1]}.py (或 ax 对应命令), 不要新写脚本")
 
 def cmd_dsedit(args):
     """用AI编辑文件: ax dsedit f.py -m 需求 [--apply]"""
@@ -620,7 +645,7 @@ COMMANDS = {
     "setphone": cmd_setphone, "cardphone": cmd_cardphone,
     "transcribe": cmd_transcribe, "summarize-rec": cmd_summarize_rec,
     "crossref": cmd_crossref, "clean": cmd_clean, "status": cmd_status, "task": cmd_task, "nophone": cmd_nophone, "oem": cmd_oem, "ds": cmd_ds, "agent": cmd_agent, "memory": cmd_memory, "collab": cmd_collab,
-    "route": cmd_route, "dsedit": cmd_dsedit,
+    "route": cmd_route, "dsedit": cmd_dsedit, "find": cmd_find,
     # 复用工具(2026-09-05)：清单核库存/秒查中国仓/定点补丁/能力地图/推GitHub/反思
     "stocklist": _run_script("stock_check_list.py"), "cnstk": _run_script("cn_stock.py"),
     "patch": _run_script("patch_file.py"), "index": _run_script("build_script_index.py"),
