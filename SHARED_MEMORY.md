@@ -41,7 +41,7 @@
 （本地豆包变更偏好/决策后在此追加）
 
 ---
-*最后更新：2026-09-05 12:23*
+*最后更新：2026-09-05 12:37*
 
 
 ## 云电脑使用说明
@@ -245,6 +245,10 @@ SyntaxError: source code cannot contain null bytes
 
 
 ## 经验沉淀
+
+### [96310c2c] 2026-09-05 12:37 | 来源:外接大脑 | 标签:架构,运维
+豆包云电脑本质是ByteFaaS沙箱容器（_FAAS_INSTANCE_NAME可验证），不活跃会被平台回收，无"始终在线"开关。容器内watchdog/bashrc自启只能防daemon崩溃，防不了容器回收。容器回收后唯一唤醒方式是豆包AI发起云电脑任务（消耗token），无公开API/Webhook可远程唤醒。
+
 
 ### [ef7a485f] 2026-09-05 11:55 | 来源:外接大脑 | 标签:架构,心跳
 心跳分片模块instances_shard.py已上线，解决多实例并发覆盖instances.json问题。每个实例独立写heartbeats/<名>.json，聚合读取。
