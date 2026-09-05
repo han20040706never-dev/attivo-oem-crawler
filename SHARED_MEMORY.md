@@ -41,7 +41,7 @@
 （本地豆包变更偏好/决策后在此追加）
 
 ---
-*最后更新：2026-09-03 15:57*
+*最后更新：2026-09-05 11:55*
 
 
 ## 云电脑使用说明
@@ -227,3 +227,10 @@ SyntaxError: source code cannot contain null bytes
 - [09-03 12:54] [改造crawl_yamaha_pdfs.py继承crawler_base.CrawlerBase] ERROR: DeepSeek生成失败 ERROR(exit 1): File "/opt/python3.12/bin/python3", line 1
     ELF
 SyntaxError: source code cannot contain null bytes
+
+
+## 经验沉淀
+
+### [ef7a485f] 2026-09-05 11:55 | 来源:外接大脑 | 标签:架构,心跳
+心跳分片模块instances_shard.py已上线，解决多实例并发覆盖instances.json问题。每个实例独立写heartbeats/<名>.json，聚合读取。
+
