@@ -872,9 +872,12 @@ def check_heartbeat():
                 for inst_name, _ in stale:
                     if time.time() - last_heal.get(inst_name, 0) < 1800:
                         continue
-                    write_flag(inst_name, f"心跳超时，外接大脑自动自愈", "外接大脑")
+                    ok = write_flag(inst_name, f"心跳超时，外接大脑自动自愈", "外接大脑")
                     last_heal[inst_name] = time.time()
-                    log(f"  自愈: 已下发重启flag → {inst_name}")
+                    if ok:
+                        log(f"  自愈: 已下发重启flag → {inst_name}")
+                    else:
+                        log(f"  自愈: {inst_name} 已有未过期flag，跳过")
                 with open(heal_cache, 'w', encoding='utf-8') as f:
                     json.dump(last_heal, f, ensure_ascii=False)
             except Exception as _he:
