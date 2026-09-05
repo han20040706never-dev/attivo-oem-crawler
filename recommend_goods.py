@@ -62,7 +62,7 @@ ST = None; prods = []; cnids = set()
 if "--fresh" not in sys.argv and os.path.exists(_CACHE_STOCK):
     try:
         _sc = json.load(open(_CACHE_STOCK, encoding="utf-8"))
-        if _time.time() - _sc.get("ts", 0) < 6 * 3600:
+        if _time.time() - _sc.get("ts", 0) < 2 * 3600:  # 2026-09-05 6h->2h降低过时误判; 关键0结论再用cn_stock.qty_with_verify实时复核
             ST = _sc["ST"]; prods = list(range(_sc.get("prods", 0)))
             print(f"用中国仓库存缓存({_sc.get('prods')}产品/{_time.strftime('%m-%d %H:%M', _time.localtime(_sc['ts']))})，--fresh强刷")
     except Exception:
