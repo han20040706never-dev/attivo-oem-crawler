@@ -1,7 +1,7 @@
 # 脚本能力地图（自动生成，勿手改）
-> 生成时间 2026-09-05 16:15 · 生成器 `python build_script_index.py`
+> 生成时间 2026-09-05 18:13 · 生成器 `python build_script_index.py`
 > **新任务铁律**：先在本地图找现成脚本/函数 → 再 `ax route` → 都没有才写新脚本；新脚本必须有模块 docstring，写完重跑本生成器入库。
-> 共 92 个脚本，分 11 类。
+> 共 94 个脚本，分 11 类。
 
 
 ## CRM/Odoo 操作（16）
@@ -14,7 +14,7 @@
 | `crm_ops` | CRM批量操作工具 - 零token省额度 | get_client, find_state_id, find_tag_id, find_source_id, cmd_newlead, cmd_fixleads, cmd_note, cmd_pricelist |
 | `customer_score` | customer_score.py — 客户价值分(value_score)与行动分(action_score)计算 | Customer, Lead, normalize_text, classify_category, category_cycle, region_score, compute_cycle, compute_value_score |
 | `customer_summary` | 客户速查 — 一句话查客户全貌 | strip_html, main |
-| `fill_phone` | （无docstring，待补） |  |
+| `fill_phone` | 把 Odoo 联系人 phone 栏补回 customer_profile.json 的 contact_way 字段(只补已有电话的户)。一次性数据回填脚本。 |  |
 | `fix_typos` | 专有名词纠错批量订正：遍历陈国标的商机/线索备注，替换错误写法为正确写法。 | main |
 | `match_opp` | 本地商机匹配 - 根据录音文件名自动匹配Odoo联系人/商机 | extract_names_from_filename, match_opportunity |
 | `nophone` | 列出陈国标的活跃线索/商机中缺手机号的记录（含联系人侧号码判断）。 | has |
@@ -31,7 +31,7 @@
 | `build_dashboard` | 生成自包含HTML可视化看板，零token查看 |  |
 | `build_loadout` | 外勤装车综合建议：以桌面最新需求清单为底，叠加中国仓现货/全员销售热度/覆盖广度， | avail_of, advise, style_header |
 | `build_profiles` | 客户行为态度档案 customer_profile.json 生成器(v2 对齐销售SOP)。 | norm_trust, tier_of, ctype, consume_kind, cross_of, brand_of, sop_stage |
-| `gen_evidence` | （无docstring，待补） |  |
+| `gen_evidence` | 从 notes_plain.json 抽取客户证据卡(马力/冲程/用途/供应商/价格/质量/库存/月耗/补货时点),输出 evidence_cards.json。一次性数据处理脚本。 |  |
 | `gen_lookup` | 机型代际查询 & 货盘代际结构扫描。 | build_index, lookup, cmd_lookup, cmd_scan |
 | `pull_sales` | 一次性拉取Odoo全量销售数据，本地聚合，输出紧凑JSON给可视化用 |  |
 | `recommend_goods` | 外勤带货综合推荐：需求清单 ∪ 全员销售小件 ∪ 油封OEM主数据，结合Odoo在手，只四冲。 | norm, repn, brand_of, cov_count, bigcat, is_filter, infer_cat, style_sheet |
@@ -133,9 +133,11 @@
 | `search_github_outboard` | GitHub搜索船外机配件相关项目 |  |
 | `xlsx2pdf` | xlsx -> PDF（PyMuPDF绘制表格，不依赖Excel/WPS，绝不卡COM） | wlen, new_page, draw_header |
 
-## 其他（3）
+## 其他（5）
 | 脚本 | 用途 | 主要入口/函数 |
 |---|---|---|
 | `add_demand` | 中国大陆需求清单一键填写工具 | check_part, main |
 | `ax` | 统一工作流入口 - 所有操作走这里，强制省token模式 | cmd_query, cmd_part, cmd_customer, cmd_sales, cmd_ai, cmd_think, cmd_summarize, cmd_fetch |
 | `parse_suzuki_pdf` | 铃木原厂PDF零件目录解析 - 提取零件号+名称+适用机型 | extract_parts |
+| `script_match` | script_match.py — 零token本地脚本智能匹配器。 | load_index, find, main |
+| `task_memory` | task_memory.py — 零token本地"任务模式库"(自学习闭环)。 | did, recall, upgrade_hints, main |
