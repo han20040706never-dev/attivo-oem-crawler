@@ -69,7 +69,8 @@ def check_behavior():
             continue
         try:
             content = open(f, 'r', encoding='utf-8').read()
-            if 'def ' in content and 'try:' not in content and len(content) > 200:
+            # 只对有 __main__ 入口的可执行脚本要求 try/except(库模块/一次性小脚本不需要)
+            if 'def ' in content and 'try:' not in content and len(content) > 800 and '__name__' in content:
                 add("INFO", "脚本不合规", f"{os.path.basename(f)}: 无try/except，违反自消化铁律")
         except:
             pass
@@ -148,8 +149,20 @@ def main():
         e = len([i for i in ISSUES if i[0]=="ERROR"])
         w = len([i for i in ISSUES if i[0]=="WARN"])
         info = len([i for i in ISSUES if i[0]=="INFO"])
+        try:
+            import task_memory
+            _h = task_memory.upgrade_hints()
+            if _h:
+                print("\n【任务模式自动升级】重复且仍临时手写, 建议沉淀正式脚本:")
+                for _r in sorted(_h, key=lambda x: -x.get('n', 1))[:8]:
+                    print(f"  x{_r.get('n',1)} {_r['q']} (当前: {_r['script']})")
+        except Exception:
+            pass
         print(f"\n汇总: {e}错误, {w}警告, {info}提示")
     print("=" * 55)
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        print(f"FAIL {type(e).__name__}: {e}")
